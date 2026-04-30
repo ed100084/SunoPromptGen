@@ -1,17 +1,33 @@
-# OS
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build
+dist/
+dist-ssr/
+node_modules/
+.vite/
+
+# Editor / OS
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Editor
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 .idea/
 *.swp
 *~
 
 # Local
-*.log
-node_modules/
-dist/
+*.local
 .env
 .env.local
+.env.*.local
+
+# TS build artifacts
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

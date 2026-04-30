@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suno Prompt Generator｜v5.5 優化版</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  body { font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  textarea { font-family: 'JetBrains Mono', 'Consolas', monospace; }
+  .tag-chip { transition: all 0.15s; }
+  .tag-chip:hover { transform: translateY(-1px); }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect, useCallback } = React;
+
+/* ===========================================================
+   資料庫 — 依 Suno v5.5 prompt 工程指南整理
+   =========================================================== */
+
+// 曲風（含 subgenre 細分，v5.5 對 subgenre 反應更準）
+const GENRES = {
+  "華語抒情": "mandarin emotional ballad, cinematic pop",
+  "華語流行": "mandarin contemporary pop",
+  "華語搖滾": "mandarin alternative rock",
+  "華語民謠": "mandarin indie folk",
+  "華語嘻哈": "mandarin hip hop, modern trap",
+  "古風中國風": "chinese traditional fusion, modern arrangement",
+  "City Pop": "japanese city pop, 80s funk-influenced",
+  "Synthwave": "synthwave, retro-futuristic 80s",
+  "Lo-fi Hip Hop": "lo-fi hip hop, jazzy chill beats",
+  "Indie Pop": "indie pop, dreamy jangly guitars",
+  "Indie Folk": "indie folk, intimate storytelling",
+  "Dream Pop": "dream pop, shoegaze textures",
+  "K-Pop": "k-pop, glossy hyper-pop production",
+  "R&B / Soul": "modern r&b, neo-soul",
+  "Cinematic": "cinematic orchestral score, epic",
+  "Ambient": "ambient, atmospheric soundscape",
+  "EDM": "festival EDM, big-room drop",
+  "House": "deep house, four-on-the-floor groove",
+  "Bossa Nova": "bossa nova, brazilian jazz",
+  "Acoustic": "acoustic singer-songwriter, intimate",
+  "Pop Punk": "pop punk, energetic distorted guitars",
+  "Funk": "funk, slap bass, tight horns"
+};
+
+// 情緒
+const MOODS = {
+  "溫暖": "warm",
+  "悲傷": "melancholic, bittersweet",
+  "勵志": "uplifting, inspiring",
+  "懷舊": "nostalgic",
+  "浪漫": "romantic, tender",
+  "希望": "hopeful, optimistic",
+  "孤獨": "lonely, introspective",
+  "憤怒": "angry, intense",
+  "平靜": "calm, peaceful",
+  "夢幻": "dreamy, ethereal",
+  "活力": "energetic, vibrant",
+  "莊重": "solemn, dignified",
+  "歡樂": "joyful, cheerful",
+  "深情": "heartfelt, emotional",
+  "神祕": "mysterious, dark",
+  "緊張": "tense, suspenseful"
+};
+
+// 能量強度（v5.5 喜歡明確 energy 描述）
+const ENERGY = {
+  "極低（冥想/環境）": "very low energy, ambient, meditative",
+  "低（抒情/沉思）": "low energy, intimate",
+  "中（穩定流動）": "medium energy, steady groove",
+  "中高（有推進感）": "medium-high energy, driving rhythm",
+  "高（動感/燃）": "high energy, anthemic",
+  "極高（爆發/嗨）": "very high energy, explosive"
+};
+
+// 樂器（已加形容詞，v5.5 對「形容詞+樂器」反應比裸樂器名更準）
+const INSTRUMENTS = {
+  "暖音鋼琴": "warm piano",
+  "氈式鋼琴(Felt Piano)": "felt piano, intimate",
+  "指彈原聲吉他": "fingerpicked acoustic guitar",
+  "刷弦原聲吉他": "strummed acoustic guitar",
+  "破音電吉他": "overdriven electric guitar",
+  "清音電吉他": "clean electric guitar, chorus effect",
+  "立式低音貝斯": "warm upright bass",
+  "電貝斯": "electric bass, groovy",
+  "808 Sub Bass": "808 sub bass",
+  "刷扣鼓組": "brushed drums",
+  "緊湊鼓組": "tight drum kit",
+  "電子鼓": "punchy electronic drums",
+  "鼓機": "drum machine",
+  "弦樂": "lush strings",
+  "弦樂四重奏": "string quartet",
+  "管弦樂團": "full orchestra, cinematic swells",
+  "復古合成器": "vintage analog synth, slightly detuned",
+  "氛圍墊音": "lush atmospheric pads",
+  "電影感效果": "cinematic risers and impacts",
+  "二胡": "erhu, expressive",
+  "古箏": "guzheng, plucked",
+  "竹笛": "chinese bamboo flute",
+  "薩克斯風": "smooth saxophone",
+  "小號": "muted trumpet",
+  "管風琴": "hammond organ",
+  "音樂盒": "music box, celesta",
+  "口琴": "harmonica",
+  "烏克麗麗": "ukulele, bright",
+  "黑膠鼓點": "dusty boom-bap drums"
+};
+
+// 人聲（具體 delivery 形容）
+const VOCALS = {
+  "女聲(柔/氣音)": "soft female vocals, breathy delivery",
+  "女聲(高亢)": "powerful female vocals, soaring belt",
+  "女聲(中音/磁性)": "smoky female alto, intimate",
+  "男聲(低沉/磁性)": "deep male baritone vocals",
+  "男聲(清亮/抒情)": "clear male tenor vocals, emotive",
+  "男聲(沙啞)": "raspy male vocals",
+  "童聲合唱": "children's choir, innocent harmonies",
+  "雙人對唱": "male and female duet",
+  "豐富和聲": "rich layered backing harmonies",
+  "全合唱團": "full choir, anthemic",
+  "饒舌": "rap verses, flow-driven",
+  "低語": "intimate whisper vocals",
+  "純音樂": "instrumental, no vocals"
+};
+
+// 製作風格 / 紋理（v5.5 對細節描述反應極佳）
+const TEXTURES = {
+  "電影感製作": "cinematic production",
+  "復古類比": "vintage analog warmth, tape saturation",
+  "現代亮麗": "polished modern production",
+  "Lo-fi 質感": "lo-fi texture, vinyl crackle",
+  "氛圍空間": "atmospheric, spacious reverb",
+  "緊湊乾淨": "tight dry mix",
+  "大編制層次": "epic layered arrangement",
+  "極簡編制": "minimal arrangement, sparse",
+  "貼耳近距收音": "close-mic intimacy",
+  "板式殘響": "subtle plate reverb",
+  "房間感": "warm room ambience",
+  "膠帶失真": "tape distortion, lo-fi grit",
+  "顆粒紋理": "gritty texture, sandy",
+  "原始情感核心": "raw emotional core"
+};
+
+// 抗切割感關鍵字
+const COHESION_KEYWORDS = "seamless transitions, cohesive arrangement, consistent groove throughout, flowing dynamics";
+
+// Negative Prompts（v5.5 強烈推薦使用）
+const NEGATIVES = {
+  "無 Autotune": "no autotune",
+  "無過度修音": "no over-processing",
+  "無合成器": "no synths",
+  "無鼓機": "no drum machines",
+  "無電子節拍": "no electronic beats",
+  "無大量殘響": "no reverb wash",
+  "無弦樂": "no strings",
+  "無人聲": "no vocals",
+  "無和聲": "no backing vocals",
+  "無破音": "no distortion",
+  "無饒舌": "no rap",
+  "無管樂": "no horns",
+  "無電吉他": "no electric guitar",
+  "無壓縮過度": "no over-compression",
+  "無爵士元素": "no jazz elements",
+  "無 EDM Drop": "no EDM drop"
+};
+
+// 段落結構模板（描述採 v5.5 高訊號表達）
+const STRUCTURE_TEMPLATES = {
+  "標準流行 (V-PC-C-V-PC-C-B-C)": [
+    { tag: "Intro", desc: "instrumental build, atmospheric", lyrics: "" },
+    { tag: "Verse 1", desc: "intimate, sparse arrangement", lyrics: "" },
+    { tag: "Pre-Chorus", desc: "rising tension, drums entering", lyrics: "" },
+    { tag: "Chorus", desc: "full energy, soaring vocals", lyrics: "" },
+    { tag: "Verse 2", desc: "maintaining momentum, slightly fuller", lyrics: "" },
+    { tag: "Pre-Chorus", desc: "building further", lyrics: "" },
+    { tag: "Chorus", desc: "bigger, layered harmonies", lyrics: "" },
+    { tag: "Bridge", desc: "stripped back, emotional peak", lyrics: "" },
+    { tag: "Final Chorus", desc: "biggest moment, ad-libs and layers", lyrics: "" },
+    { tag: "Outro", desc: "gradual fade, return to intro motif", lyrics: "" }
+  ],
+  "簡短版 (V-C-V-C-Outro)": [
+    { tag: "Verse 1", desc: "intimate opening", lyrics: "" },
+    { tag: "Chorus", desc: "full arrangement", lyrics: "" },
+    { tag: "Verse 2", desc: "slightly fuller", lyrics: "" },
+    { tag: "Chorus", desc: "with harmonies", lyrics: "" },
+    { tag: "Outro", desc: "gentle fade", lyrics: "" }
+  ],
+  "抒情骨架 (Intro-V-C-V-C-B-C)": [
+    { tag: "Intro", desc: "solo piano, ambient pad", lyrics: "" },
+    { tag: "Verse 1", desc: "vocals with piano only", lyrics: "" },
+    { tag: "Chorus", desc: "strings swelling, emotional lift", lyrics: "" },
+    { tag: "Verse 2", desc: "subtle percussion enters", lyrics: "" },
+    { tag: "Chorus", desc: "full band, emotional climb", lyrics: "" },
+    { tag: "Bridge", desc: "key change, vocal peak", lyrics: "" },
+    { tag: "Final Chorus", desc: "biggest moment, layered vocals", lyrics: "" },
+    { tag: "Outro", desc: "fade to solo piano", lyrics: "" }
+  ],
+  "電子流行 Drop": [
+    { tag: "Intro", desc: "synth pad, filter sweep", lyrics: "" },
+    { tag: "Verse 1", desc: "minimal beat, atmospheric", lyrics: "" },
+    { tag: "Pre-Chorus", desc: "build with riser, snare roll", lyrics: "" },
+    { tag: "Drop / Chorus", desc: "big synth drop, energetic", lyrics: "" },
+    { tag: "Verse 2", desc: "sustained energy", lyrics: "" },
+    { tag: "Drop / Chorus", desc: "biggest moment", lyrics: "" },
+    { tag: "Outro", desc: "filter out, fade", lyrics: "" }
+  ],
+  "搖滾骨架": [
+    { tag: "Intro", desc: "guitar riff, building drums", lyrics: "" },
+    { tag: "Verse 1", desc: "groove-driven, vocal-forward", lyrics: "" },
+    { tag: "Chorus", desc: "full band, anthemic", lyrics: "" },
+    { tag: "Verse 2", desc: "sustained intensity", lyrics: "" },
+    { tag: "Chorus", desc: "big chorus, gang vocals", lyrics: "" },
+    { tag: "Solo", desc: "guitar solo, melodic", lyrics: "" },
+    { tag: "Final Chorus", desc: "biggest energy", lyrics: "" },
+    { tag: "Outro", desc: "drum hits ending", lyrics: "" }
+  ],
+  "極簡 (V-C)": [
+    { tag: "Verse", desc: "intimate", lyrics: "" },
+    { tag: "Chorus", desc: "full energy", lyrics: "" }
+  ],
+  "純樂器 (Loop)": [
+    { tag: "Intro", desc: "main motif establishes", lyrics: "" },
+    { tag: "A Section", desc: "main groove", lyrics: "" },
+    { tag: "B Section", desc: "variation, contrast", lyrics: "" },
+    { tag: "A Section", desc: "return to main groove", lyrics: "" },
+    { tag: "Outro", desc: "loopable fade", lyrics: "" }
+  ]
+};
+
+// LLM 提供商設定
+const PROVIDERS = {
+  openrouter: {
+    name: "OpenRouter（推薦）",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "anthropic/claude-sonnet-4.5",
+    type: "openai"
+  },
+  openai: {
+    name: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-4o-mini",
+    type: "openai"
+  },
+  anthropic: {
+    name: "Anthropic Direct",
+    baseUrl: "https://api.anthropic.com",
+    defaultModel: "claude-sonnet-4-5-20250929",
+    type: "anthropic"
+  },
+  gemini: {
+    name: "Google Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    defaultModel: "gemini-2.5-flash",
+    type: "gemini"
+  }
+};
+
+// 本地模板用：意象詞庫（依情緒分類）
+const IMAGE_BANK = {
+  "溫暖": ["陽光", "微風", "懷裡", "笑容", "燭光", "相依", "平凡", "安然"],
+  "悲傷": ["雨夜", "影子", "破碎", "遠去", "沉默", "枯萎", "蒼白", "失落"],
+  "勵志": ["晨曦", "彼岸", "翅膀", "勇敢", "綻放", "向前", "光芒", "蛻變"],
+  "懷舊": ["巷口", "舊照", "夏天", "信箋", "斑駁", "斜陽", "曾經", "腳印"],
+  "浪漫": ["星空", "心跳", "眼神", "擁抱", "溫柔", "緣分", "凝望", "守候"],
+  "希望": ["黎明", "種子", "天空", "綻開", "等待", "答案", "可能", "未來"],
+  "孤獨": ["深夜", "城市", "燈光", "獨行", "回聲", "空曠", "雨聲", "窗外"],
+  "夢幻": ["雲端", "幻影", "迷霧", "彩虹", "星河", "漂浮", "倒影", "夢境"],
+  "神祕": ["古老", "迷宮", "暗影", "低語", "未知", "符號", "鏡中", "邊界"],
+  "活力": ["奔跑", "燃燒", "節拍", "汗水", "閃耀", "突破", "瘋狂", "前進"],
+  "深情": ["心底", "誓言", "歲月", "輪廓", "守望", "牽掛", "凝結", "眷戀"],
+  "歡樂": ["笑聲", "派對", "雀躍", "舞動", "輕快", "歡呼", "彩帶", "陽光"],
+  "莊重": ["時光", "信仰", "山河", "歸屬", "肩膀", "傳承", "見證", "永恆"],
+  "緊張": ["心跳", "倒數", "緊握", "邊緣", "閃電", "對峙", "屏息", "迫近"]
+};
+
+// 語言（影響 Suno 人聲關鍵字與 AI 生成歌詞用語）
+const LANGUAGES = {
+  "華語(繁體)": { suno: "mandarin chinese vocals", llm: "繁體中文（台灣用語）" },
+  "華語(簡體)": { suno: "mandarin chinese vocals", llm: "簡體中文" },
+  "台語": { suno: "taiwanese hokkien vocals", llm: "台語（漢字書寫）" },
+  "粵語": { suno: "cantonese vocals", llm: "粵語（廣東話）" },
+  "英文": { suno: "english vocals", llm: "English" },
+  "日文": { suno: "japanese vocals", llm: "日文（漢字＋假名）" },
+  "韓文": { suno: "korean vocals", llm: "한국어 (Korean)" },
+  "西班牙文": { suno: "spanish vocals", llm: "Español (Spanish)" },
+  "中英混合": { suno: "mandarin and english bilingual vocals", llm: "中文為主、副歌穿插英文" },
+  "純樂器(無歌詞)": { suno: "instrumental, no vocals", llm: "（無，純樂器）" }
+};
+
+// 一鍵情境範本（泛用，去除特定行業情境）
+const SCENARIOS = {
+  "華語抒情慢歌": {
+    desc: "經典抒情主歌-副歌，深情女聲",
+    language: "華語(繁體)",
+    genre: "華語抒情",
+    moods: ["深情", "悲傷", "懷舊"],
+    instruments: ["氈式鋼琴(Felt Piano)", "弦樂", "指彈原聲吉他"],
+    vocals: ["女聲(柔/氣音)", "豐富和聲"],
+    textures: ["電影感製作", "氛圍空間", "貼耳近距收音"],
+    energy: "低（抒情/沉思）",
+    bpm: "70",
+    key: "Am",
+    structure: "抒情骨架 (Intro-V-C-V-C-B-C)",
+    negatives: ["無 Autotune", "無大量殘響"],
+    extra: "emotional, heartbreak, soaring chorus"
+  },
+  "流行燃曲": {
+    desc: "勵志正能量，副歌大編制",
+    language: "華語(繁體)",
+    genre: "華語流行",
+    moods: ["勵志", "希望", "活力"],
+    instruments: ["暖音鋼琴", "弦樂", "緊湊鼓組", "破音電吉他"],
+    vocals: ["男聲(清亮/抒情)", "豐富和聲"],
+    textures: ["大編制層次", "電影感製作"],
+    energy: "高（動感/燃）",
+    bpm: "100",
+    key: "D major",
+    structure: "標準流行 (V-PC-C-V-PC-C-B-C)",
+    negatives: ["無 Autotune", "無過度修音"],
+    extra: "anthem, uplifting, triumphant"
+  },
+  "搖滾爆發": {
+    desc: "硬派搖滾、燃系吉他主導",
+    language: "華語(繁體)",
+    genre: "華語搖滾",
+    moods: ["憤怒", "活力"],
+    instruments: ["破音電吉他", "電貝斯", "緊湊鼓組"],
+    vocals: ["男聲(沙啞)", "豐富和聲"],
+    textures: ["緊湊乾淨", "原始情感核心"],
+    energy: "極高（爆發/嗨）",
+    bpm: "140",
+    key: "E minor",
+    structure: "搖滾骨架",
+    negatives: ["無 Autotune", "無合成器"],
+    extra: "raw, gritty, gang vocals on chorus"
+  },
+  "Lo-fi 讀書背景": {
+    desc: "純樂器、放鬆、可循環",
+    language: "純樂器(無歌詞)",
+    genre: "Lo-fi Hip Hop",
+    moods: ["平靜", "懷舊", "夢幻"],
+    instruments: ["暖音鋼琴", "黑膠鼓點", "立式低音貝斯"],
+    vocals: ["純音樂"],
+    textures: ["Lo-fi 質感", "氛圍空間", "膠帶失真"],
+    energy: "低（抒情/沉思）",
+    bpm: "82",
+    key: "F major",
+    structure: "純樂器 (Loop)",
+    negatives: ["無人聲", "無 EDM Drop"],
+    extra: "study beats, mellow, jazzy chords, vinyl warmth"
+  },
+  "古風中國風": {
+    desc: "國樂元素融合現代編曲",
+    language: "華語(繁體)",
+    genre: "古風中國風",
+    moods: ["懷舊", "深情", "莊重"],
+    instruments: ["古箏", "二胡", "竹笛", "弦樂", "暖音鋼琴"],
+    vocals: ["女聲(柔/氣音)", "男聲(清亮/抒情)"],
+    textures: ["電影感製作", "氛圍空間"],
+    energy: "中（穩定流動）",
+    bpm: "78",
+    key: "Am pentatonic",
+    structure: "抒情骨架 (Intro-V-C-V-C-B-C)",
+    negatives: ["無合成器", "無鼓機"],
+    extra: "chinese traditional fusion, poetic, ancient atmosphere"
+  },
+  "Indie 民謠": {
+    desc: "個人創作、原聲、敘事",
+    language: "華語(繁體)",
+    genre: "Indie Folk",
+    moods: ["溫暖", "懷舊", "孤獨"],
+    instruments: ["指彈原聲吉他", "口琴", "暖音鋼琴", "立式低音貝斯"],
+    vocals: ["男聲(清亮/抒情)", "女聲(柔/氣音)"],
+    textures: ["復古類比", "極簡編制", "房間感"],
+    energy: "低（抒情/沉思）",
+    bpm: "90",
+    key: "G major",
+    structure: "標準流行 (V-PC-C-V-PC-C-B-C)",
+    negatives: ["無合成器", "無 Autotune", "無鼓機"],
+    extra: "indie folk, warm, intimate storytelling"
+  },
+  "電影配樂": {
+    desc: "管弦樂史詩感、純音樂",
+    language: "純樂器(無歌詞)",
+    genre: "Cinematic",
+    moods: ["神祕", "希望", "緊張", "莊重"],
+    instruments: ["管弦樂團", "弦樂四重奏", "暖音鋼琴", "電影感效果"],
+    vocals: ["純音樂"],
+    textures: ["電影感製作", "大編制層次", "氛圍空間"],
+    energy: "中高（有推進感）",
+    bpm: "85",
+    key: "D minor",
+    structure: "純樂器 (Loop)",
+    negatives: ["無人聲", "無鼓機", "無合成器"],
+    extra: "epic, soundtrack, building emotional arc"
+  },
+  "City Pop 復古": {
+    desc: "80年代日式都會流行",
+    language: "日文",
+    genre: "City Pop",
+    moods: ["懷舊", "浪漫", "夢幻"],
+    instruments: ["清音電吉他", "電貝斯", "復古合成器", "薩克斯風", "緊湊鼓組"],
+    vocals: ["女聲(中音/磁性)", "豐富和聲"],
+    textures: ["復古類比", "現代亮麗"],
+    energy: "中（穩定流動）",
+    bpm: "108",
+    key: "F major 7",
+    structure: "標準流行 (V-PC-C-V-PC-C-B-C)",
+    negatives: ["無 EDM Drop", "無 Autotune"],
+    extra: "80s japanese city pop, smooth groove, jazzy chords"
+  },
+  "EDM 派對": {
+    desc: "電子節拍、Drop 主導",
+    language: "英文",
+    genre: "EDM",
+    moods: ["活力", "歡樂"],
+    instruments: ["復古合成器", "鼓機", "808 Sub Bass", "氛圍墊音"],
+    vocals: ["女聲(高亢)"],
+    textures: ["現代亮麗", "緊湊乾淨"],
+    energy: "極高（爆發/嗨）",
+    bpm: "128",
+    key: "A minor",
+    structure: "電子流行 Drop",
+    negatives: ["無原聲樂器", "無爵士元素"],
+    extra: "festival anthem, big-room drop, energetic"
+  },
+  "氛圍環境": {
+    desc: "純音樂氛圍墊底，可冥想/工作",
+    language: "純樂器(無歌詞)",
+    genre: "Ambient",
+    moods: ["平靜", "夢幻", "神祕"],
+    instruments: ["氛圍墊音", "氈式鋼琴(Felt Piano)", "弦樂"],
+    vocals: ["純音樂"],
+    textures: ["氛圍空間", "極簡編制"],
+    energy: "極低（冥想/環境）",
+    bpm: "65",
+    key: "C major",
+    structure: "純樂器 (Loop)",
+    negatives: ["無人聲", "無鼓機", "無破音"],
+    extra: "meditative, ethereal, evolving textures"
+  }
+};
+
+/* ===========================================================
+   子元件
+   =========================================================== */
+
+function MultiSelectChips({ options, selected, onChange, color = "indigo" }) {
+  const colorClass = {
+    indigo: "bg-indigo-600 text-white",
+    rose: "bg-rose-600 text-white",
+    emerald: "bg-emerald-600 text-white",
+    amber: "bg-amber-600 text-white",
+    sky: "bg-sky-600 text-white",
+    slate: "bg-slate-700 text-white",
+    red: "bg-red-600 text-white"
+  }[color];
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {Object.keys(options).map(key => {
+        const isSel = selected.includes(key);
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => {
+              onChange(isSel ? selected.filter(k => k !== key) : [...selected, key]);
+            }}
+            className={`tag-chip text-sm px-3 py-1.5 rounded-full border ${
+              isSel ? colorClass + " border-transparent shadow-sm" : "bg-white text-slate-700 border-slate-300 hover:border-slate-400"
+            }`}
+          >
+            {key}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SingleSelect({ options, value, onChange, placeholder = "請選擇" }) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+    >
+      <option value="">{placeholder}</option>
+      {Object.keys(options).map(key => (
+        <option key={key} value={key}>{key}</option>
+      ))}
+    </select>
+  );
+}
+
+function Section({ title, children, hint }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-4">
+      <h3 className="text-base font-semibold text-slate-800 mb-1 flex items-center gap-2">
+        {title}
+      </h3>
+      {hint && <p className="text-xs text-slate-500 mb-3">{hint}</p>}
+      <div className={hint ? "" : "mt-3"}>{children}</div>
+    </div>
+  );
+}
+
+/* ===========================================================
+   主元件
+   =========================================================== */
+
+function App() {
+  const [scenario, setScenario] = useState("");
+  const [language, setLanguage] = useState("華語(繁體)");
+  const [genre, setGenre] = useState("華語抒情");
+  const [moods, setMoods] = useState(["溫暖"]);
+  const [energy, setEnergy] = useState("中（穩定流動）");
+  const [instruments, setInstruments] = useState(["暖音鋼琴", "弦樂"]);
+  const [vocals, setVocals] = useState(["女聲(柔/氣音)"]);
+  const [textures, setTextures] = useState(["電影感製作"]);
+  const [negatives, setNegatives] = useState(["無 Autotune"]);
+  const [bpm, setBpm] = useState("75");
+  const [musicKey, setMusicKey] = useState("C major");
+  const [extra, setExtra] = useState("");
+  const [cohesion, setCohesion] = useState(true);
+  const [structureName, setStructureName] = useState("抒情骨架 (Intro-V-C-V-C-B-C)");
+  const [sections, setSections] = useState(STRUCTURE_TEMPLATES["抒情骨架 (Intro-V-C-V-C-B-C)"]);
+  const [songTitle, setSongTitle] = useState("");
+  const [voiceCloneActive, setVoiceCloneActive] = useState(false);
+  const [copied, setCopied] = useState({ style: false, lyrics: false, full: false, export: false });
+
+  // 歌詞 AI 生成相關 state
+  const [lyricsTheme, setLyricsTheme] = useState("");
+  const [lyricsKeywords, setLyricsKeywords] = useState("");
+  const [lyricsStory, setLyricsStory] = useState("");
+  const [aiMode, setAiMode] = useState("export"); // export | api | template
+  const [aiProvider, setAiProvider] = useState("openrouter");
+  const [apiKey, setApiKey] = useState("");
+  const [apiModel, setApiModel] = useState("");
+  const [apiBaseUrl, setApiBaseUrl] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [genSuccess, setGenSuccess] = useState("");
+  const [exportPrompt, setExportPrompt] = useState("");
+
+  // 載入儲存的 API 設定
+  useEffect(() => {
+    const k = localStorage.getItem("suno_api_key");
+    const p = localStorage.getItem("suno_api_provider");
+    const m = localStorage.getItem("suno_api_model");
+    const b = localStorage.getItem("suno_api_base");
+    if (k) setApiKey(k);
+    if (p) setAiProvider(p);
+    if (m) setApiModel(m);
+    if (b) setApiBaseUrl(b);
+  }, []);
+
+  // 套用情境範本
+  const applyScenario = (name) => {
+    if (!name) return;
+    const s = SCENARIOS[name];
+    setScenario(name);
+    if (s.language) setLanguage(s.language);
+    setGenre(s.genre);
+    setMoods(s.moods);
+    setEnergy(s.energy);
+    setInstruments(s.instruments);
+    setVocals(s.vocals);
+    setTextures(s.textures);
+    setNegatives(s.negatives || []);
+    setBpm(s.bpm);
+    setMusicKey(s.key);
+    setExtra(s.extra);
+    setStructureName(s.structure);
+    setSections(STRUCTURE_TEMPLATES[s.structure].map(x => ({ ...x })));
+  };
+
+  const applyStructure = (name) => {
+    setStructureName(name);
+    setSections(STRUCTURE_TEMPLATES[name].map(x => ({ ...x })));
+  };
+
+  const updateSection = (idx, field, value) => {
+    setSections(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
+
+  const addSection = () => {
+    setSections(prev => [...prev, { tag: "Verse", desc: "", lyrics: "" }]);
+  };
+
+  const removeSection = (idx) => {
+    setSections(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const moveSection = (idx, dir) => {
+    setSections(prev => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return next;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  };
+
+  /* ===========================================================
+     Style Prompt 組裝（依 Suno v5.5 四層架構）
+     Layer 1: Genre + tempo + key + energy
+     Layer 2: Instrumentation
+     Layer 3: Vocal direction（若啟用 Voice Clone 則略）
+     Layer 4: Production / Textures
+     + Negative constraints
+     =========================================================== */
+  const stylePrompt = useMemo(() => {
+    const isInstrumental = language === "純樂器(無歌詞)";
+    const langKw = LANGUAGES[language]?.suno || "";
+
+    const layer1 = [];
+    if (genre) layer1.push(GENRES[genre] || genre);
+    if (bpm) layer1.push(`${bpm} BPM`);
+    if (musicKey) layer1.push(`key of ${musicKey}`);
+    if (energy) layer1.push(ENERGY[energy] || energy);
+    if (moods.length) layer1.push(moods.map(m => MOODS[m]).filter(Boolean).join(", "));
+
+    const layer2 = instruments.map(i => INSTRUMENTS[i]).filter(Boolean).join(", ");
+
+    // 人聲層：純樂器 → 強制 instrumental；否則加上語言關鍵字
+    let layer3 = "";
+    if (isInstrumental) {
+      layer3 = "instrumental, no vocals";
+    } else if (!voiceCloneActive) {
+      const vocalParts = [langKw, ...vocals.map(v => VOCALS[v]).filter(Boolean)];
+      layer3 = vocalParts.filter(Boolean).join(", ");
+    }
+
+    const layer4 = textures.map(t => TEXTURES[t]).filter(Boolean).join(", ");
+
+    const negPart = negatives.map(n => NEGATIVES[n]).filter(Boolean).join(", ");
+
+    const cohesionPart = cohesion ? COHESION_KEYWORDS : "";
+
+    return [layer1.join(", "), layer2, layer3, layer4, cohesionPart, extra, negPart]
+      .filter(Boolean)
+      .join(", ");
+  }, [language, genre, bpm, musicKey, energy, moods, instruments, vocals, voiceCloneActive, textures, negatives, cohesion, extra]);
+
+  const lyricsPrompt = useMemo(() => {
+    return sections.map(s => {
+      const tagLine = s.desc ? `[${s.tag} - ${s.desc}]` : `[${s.tag}]`;
+      const body = s.lyrics.trim() || "(instrumental)";
+      return `${tagLine}\n${body}`;
+    }).join("\n\n");
+  }, [sections]);
+
+  const fullPrompt = useMemo(() => {
+    const t = songTitle ? `Title: ${songTitle}\n\n` : "";
+    return `${t}--- STYLE ---\n${stylePrompt}\n\n--- LYRICS ---\n${lyricsPrompt}`;
+  }, [songTitle, stylePrompt, lyricsPrompt]);
+
+  /* ========== 歌詞生成核心 ========== */
+
+  // 建立 LLM Prompt
+  const buildLyricsPrompt = useCallback(() => {
+    const sectionList = sections.map(s =>
+      `- [${s.tag}]${s.desc ? ` (${s.desc})` : ""}`
+    ).join("\n");
+    const kwList = lyricsKeywords.split(/[,，、]/).map(k => k.trim()).filter(Boolean);
+    const moodTxt = moods.join("、");
+    const langInfo = LANGUAGES[language]?.llm || "繁體中文";
+    const isInstrumental = language === "純樂器(無歌詞)";
+
+    if (isInstrumental) {
+      return `這是一首純樂器作品，無歌詞。請回傳所有段落 lyrics 為空字串。
+
+【段落結構】
+${sectionList}
+
+【回傳格式】嚴格回傳下列 JSON，不要 markdown code fence、不要其他文字：
+{
+  "sections": [
+    {"tag": "段落標籤", "lyrics": ""},
+    ...
+  ]
+}`;
+    }
+
+    return `你是一位專業歌詞作詞家。請依下列設定，創作一首完整歌詞。
+
+【創作語言】${langInfo}
+（請使用此語言完成所有歌詞，不要混用其他語言，除非語言設定特別指明）
+
+【歌曲風格】
+${stylePrompt}
+
+【歌曲主題】
+${lyricsTheme || "（自由發揮）"}
+
+【關鍵字】
+${kwList.length ? kwList.join("、") : "（無）"}
+
+【故事背景】
+${lyricsStory || "（無）"}
+
+【情緒基調】
+${moodTxt || "（依風格自由發揮）"}
+
+【段落結構】請依下列段落順序創作，每段需配合段落特性（如 Verse 鋪陳敘事、Chorus 情感高峰、Bridge 轉折昇華）：
+${sectionList}
+
+【創作原則】
+1. 用詞自然真摯，避免陳腔濫調與政治宗教敏感字眼
+2. 副歌（Chorus）需有強記憶點，重複段落歌詞可一致
+3. 每行字數均衡（依語言調整）：中文 7-12 字、英文 6-10 syllables 為佳
+4. 留意押韻（ABAB 或 AABB）
+5. Bridge 段需與主副歌情感對比或情緒昇華
+6. 純樂器段（如 Intro / Outro / Solo）lyrics 欄位請回傳空字串 ""
+7. 嚴格使用指定的【創作語言】，不要自行翻譯為其他語言
+
+【回傳格式】嚴格回傳下列 JSON，不要 markdown code fence、不要其他文字、不要解釋：
+{
+  "sections": [
+    {"tag": "段落標籤需與上方完全一致", "lyrics": "歌詞內容，換行用 \\n"},
+    ...
+  ]
+}`;
+  }, [sections, lyricsTheme, lyricsKeywords, lyricsStory, moods, stylePrompt, language]);
+
+  // 解析 LLM 回應並寫入 sections
+  const applyGenerated = (text) => {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("找不到 JSON 內容");
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed.sections)) throw new Error("JSON 缺少 sections 陣列");
+
+    setSections(prev => prev.map((s, i) => {
+      const m = parsed.sections.find(ps => ps.tag === s.tag) || parsed.sections[i];
+      return m ? { ...s, lyrics: (m.lyrics || "").trim() } : s;
+    }));
+    setGenSuccess(`✓ 已匯入 ${parsed.sections.length} 段歌詞，請往下查看「段落結構」`);
+    setTimeout(() => {
+      const el = document.getElementById("section-structure");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    setTimeout(() => setGenSuccess(""), 4000);
+  };
+
+  // 模式 1: 匯出 Prompt
+  const handleExportPrompt = () => {
+    setExportPrompt(buildLyricsPrompt());
+    setGenError("");
+  };
+
+  // 模式 2: API 直接呼叫
+  const handleApiGenerate = async () => {
+    if (!apiKey.trim()) { setGenError("請填入 API key"); return; }
+    setGenerating(true);
+    setGenError("");
+
+    const cfg = PROVIDERS[aiProvider];
+    const model = apiModel.trim() || cfg.defaultModel;
+    const baseUrl = apiBaseUrl.trim() || cfg.baseUrl;
+    const prompt = buildLyricsPrompt();
+
+    try {
+      let text = "";
+
+      if (cfg.type === "openai") {
+        const headers = {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        };
+        if (aiProvider === "openrouter") {
+          headers["HTTP-Referer"] = "https://github.com/ed100084/SunoPromptGen";
+          headers["X-Title"] = "Suno Prompt Generator";
+        }
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.8,
+            max_tokens: 2000
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+        text = data.choices[0].message.content;
+
+      } else if (cfg.type === "anthropic") {
+        const res = await fetch(`${baseUrl}/v1/messages`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true"
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 2000,
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+        text = data.content[0].text;
+
+      } else if (cfg.type === "gemini") {
+        const res = await fetch(`${baseUrl}/models/${model}:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.8, maxOutputTokens: 2000 }
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+        text = data.candidates[0].content.parts[0].text;
+      }
+
+      applyGenerated(text);
+      setGenSuccess("✓ 已從 API 生成歌詞，請往下查看「段落結構」");
+      setTimeout(() => {
+        const el = document.getElementById("section-structure");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+      setTimeout(() => setGenSuccess(""), 4000);
+
+      // 儲存設定
+      localStorage.setItem("suno_api_key", apiKey);
+      localStorage.setItem("suno_api_provider", aiProvider);
+      localStorage.setItem("suno_api_model", model);
+      localStorage.setItem("suno_api_base", baseUrl);
+
+    } catch (err) {
+      setGenError(`生成失敗：${err.message}`);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // 模式 3: 本地模板演算法
+  const handleTemplateGenerate = () => {
+    setGenError("");
+    setGenSuccess("");
+    const moodKey = moods[0] || "希望";
+    const bank = IMAGE_BANK[moodKey] || IMAGE_BANK["希望"];
+    const kwList = lyricsKeywords.split(/[,，、]/).map(k => k.trim()).filter(Boolean);
+    const pool = [...kwList, ...bank];
+    const theme = lyricsTheme.trim() || "心之所向";
+
+    const pick = (n=1) => {
+      const out = [];
+      const used = new Set();
+      let tries = 0;
+      while (out.length < n && tries < n * 10) {
+        const w = pool[Math.floor(Math.random() * pool.length)];
+        if (!used.has(w)) { used.add(w); out.push(w); }
+        tries++;
+      }
+      while (out.length < n) out.push(pool[Math.floor(Math.random() * pool.length)] || "光");
+      return out;
+    };
+
+    let filled = 0;
+    setSections(prev => prev.map(s => {
+      const tag = (s.tag || "").toLowerCase();
+      // 純樂器段
+      if (tag.includes("intro") || tag.includes("outro") || tag.includes("solo") ||
+          /\b[ab]\s*section\b/.test(tag)) {
+        return { ...s, lyrics: "" };
+      }
+      // 注意：Pre-Chorus 必須在 Chorus 前判斷
+      if (tag.includes("pre")) {
+        const [w1, w2] = pick(2);
+        filled++;
+        return { ...s, lyrics:
+          `當${w1}點亮整個${w2}\n` +
+          `我聽見心跳的方向` };
+      }
+      if (tag.includes("bridge")) {
+        const [w1, w2, w3] = pick(3);
+        filled++;
+        return { ...s, lyrics:
+          `如果${w1}終究會${w2}\n` +
+          `至少還有${w3}陪我走\n` +
+          `這一刻的擁有\n` +
+          `就是答案` };
+      }
+      if (tag.includes("chorus") || tag.includes("drop")) {
+        const [w1, w2] = pick(2);
+        filled++;
+        return { ...s, lyrics:
+          `${theme} ${theme}\n` +
+          `是${w1}最美的${w2}\n` +
+          `讓我記住這一刻\n` +
+          `讓${theme}永遠停留` };
+      }
+      // Verse / 其他
+      const [w1, w2, w3, w4] = pick(4);
+      filled++;
+      return { ...s, lyrics:
+        `${w1}飄散在${w2}的午後\n` +
+        `我看見${w3}在${w4}閃爍\n` +
+        `走過${w2}的時候想起你\n` +
+        `風裡有${w1}的味道` };
+    }));
+
+    setGenSuccess(`✓ 已產生 ${filled} 段歌詞草稿，請往下查看「段落結構」`);
+    // 自動 scroll 到段落結構
+    setTimeout(() => {
+      const el = document.getElementById("section-structure");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    setTimeout(() => setGenSuccess(""), 4000);
+  };
+
+  const copy = (text, key) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(prev => ({ ...prev, [key]: true }));
+      setTimeout(() => setCopied(prev => ({ ...prev, [key]: false })), 1500);
+    });
+  };
+
+  const totalLyricsChars = useMemo(() =>
+    sections.reduce((sum, s) => sum + s.lyrics.length, 0)
+  , [sections]);
+
+  // 字數警示
+  const styleWarn = stylePrompt.length > 1000;
+  const tagCount = stylePrompt.split(",").filter(x => x.trim()).length;
+  const tagWarn = tagCount > 20;
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <header className="mb-6">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Suno Prompt Generator</h1>
+            <p className="text-slate-500 mt-1">v5.5 四層架構優化｜中文友善｜抗切割感</p>
+          </div>
+          <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full font-medium">v5.5 Optimized</span>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* 左欄 */}
+        <div className="lg:col-span-7">
+
+          <Section title="🎯 一鍵情境範本" hint="選擇後自動填入所有欄位，再依需要微調">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {Object.entries(SCENARIOS).map(([name, info]) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => applyScenario(name)}
+                  className={`text-left p-3 rounded-lg border transition ${
+                    scenario === name
+                      ? "border-indigo-500 bg-indigo-50 shadow-sm"
+                      : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/50"
+                  }`}
+                >
+                  <div className="font-medium text-sm text-slate-800">{name}</div>
+                  <div className="text-xs text-slate-500 mt-1 leading-snug">{info.desc}</div>
+                </button>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="🎼 Layer 1：基本骨架（Tempo / Key / Genre / Energy）" hint="v5.5 第一層：tempo + key + 曲風 + 能量強度 + 語言">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">歌曲標題（選填）</label>
+                <input
+                  type="text"
+                  value={songTitle}
+                  onChange={e => setSongTitle(e.target.value)}
+                  placeholder="例：心之所向"
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">🌐 語言 / 語系</label>
+                <SingleSelect options={LANGUAGES} value={language} onChange={setLanguage} />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">曲風（建議 1-2 個 subgenre）</label>
+                <SingleSelect options={GENRES} value={genre} onChange={setGenre} />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">能量強度</label>
+                <SingleSelect options={ENERGY} value={energy} onChange={setEnergy} />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">BPM（速度）</label>
+                <input
+                  type="number"
+                  value={bpm}
+                  onChange={e => setBpm(e.target.value)}
+                  min="40" max="200"
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">調性 Key</label>
+                <input
+                  type="text"
+                  value={musicKey}
+                  onChange={e => setMusicKey(e.target.value)}
+                  placeholder="例：C major / Am / G major"
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                />
+              </div>
+            </div>
+            {language === "純樂器(無歌詞)" && (
+              <div className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                ⚠️ 純樂器模式：人聲區塊將被略過，歌詞段落會清空
+              </div>
+            )}
+          </Section>
+
+          <Section title="😌 情緒（建議 1-2 個）">
+            <MultiSelectChips options={MOODS} selected={moods} onChange={setMoods} color="rose" />
+          </Section>
+
+          <Section title="🎸 Layer 2：樂器配置（已含形容詞，建議 2-4 項）" hint="v5.5 對「形容詞+樂器」反應比裸樂器名更精準">
+            <MultiSelectChips options={INSTRUMENTS} selected={instruments} onChange={setInstruments} color="emerald" />
+          </Section>
+
+          <Section title="🎤 Layer 3：人聲方向" hint="若使用 Voice Clone（v5.5 Pro/Premier），建議勾選下方略過人聲描述以避免衝突">
+            <label className="flex items-center gap-2 mb-3 cursor-pointer select-none text-sm">
+              <input
+                type="checkbox"
+                checked={voiceCloneActive}
+                onChange={e => setVoiceCloneActive(e.target.checked)}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className={voiceCloneActive ? "text-indigo-700 font-medium" : "text-slate-600"}>
+                我已啟用 Voice Clone（自動略過人聲描述）
+              </span>
+            </label>
+            {!voiceCloneActive && (
+              <MultiSelectChips options={VOCALS} selected={vocals} onChange={setVocals} color="indigo" />
+            )}
+            {voiceCloneActive && (
+              <div className="text-xs text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                Voice Clone 模式：人聲描述已略過，避免與你的音色設定衝突。剩餘字元空間將用於更多製作細節。
+              </div>
+            )}
+          </Section>
+
+          <Section title="🎚️ Layer 4：製作風格 / 紋理（建議 2-3 項）" hint="v5.5 對細節描述（板式殘響、貼耳收音等）反應極佳">
+            <MultiSelectChips options={TEXTURES} selected={textures} onChange={setTextures} color="amber" />
+          </Section>
+
+          <Section title="🚫 Negative Prompts（v5.5 必用！建議 2-3 個）" hint="明確告訴模型不要什麼，比正向描述更能聚焦結果">
+            <MultiSelectChips options={NEGATIVES} selected={negatives} onChange={setNegatives} color="red" />
+          </Section>
+
+          <Section title="✨ 抗切割感" hint="自動加入 seamless transitions 等關鍵字，明顯減少段落跳接的斷裂感">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={cohesion}
+                onChange={e => setCohesion(e.target.checked)}
+                className="w-5 h-5 accent-indigo-600"
+              />
+              <span className="text-sm text-slate-700">啟用連貫性關鍵字（建議開啟）</span>
+            </label>
+            {cohesion && (
+              <div className="mt-2 p-2 bg-indigo-50 rounded text-xs text-indigo-800 font-mono break-all">
+                + {COHESION_KEYWORDS}
+              </div>
+            )}
+          </Section>
+
+          <Section title="➕ 額外補充關鍵字" hint="自由輸入特殊風格描述，會附加到 Style prompt">
+            <textarea
+              value={extra}
+              onChange={e => setExtra(e.target.value)}
+              rows={2}
+              placeholder="例：90s style, retro synth, japanese city pop influence"
+              className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm"
+            />
+          </Section>
+
+          <Section title="🎨 AI 歌詞生成" hint="生成內容會自動填入下方段落，純樂器段（Intro/Outro）會留空">
+            <div className="grid grid-cols-1 gap-3 mb-4">
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">主題句</label>
+                <input
+                  type="text"
+                  value={lyricsTheme}
+                  onChange={e => setLyricsTheme(e.target.value)}
+                  placeholder="例：離職送別、第一次心動、走過低潮"
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">關鍵字（用逗號分隔）</label>
+                <input
+                  type="text"
+                  value={lyricsKeywords}
+                  onChange={e => setLyricsKeywords(e.target.value)}
+                  placeholder="例：回憶, 感謝, 未來, 並肩"
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">故事背景（選填）</label>
+                <textarea
+                  value={lyricsStory}
+                  onChange={e => setLyricsStory(e.target.value)}
+                  rows={3}
+                  placeholder="描述歌曲背後的情境、角色、時空、情感弧線..."
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Mode tabs */}
+            <div className="flex gap-1 mb-3 border-b border-slate-200">
+              {[
+                { k: "export", label: "📋 匯出 Prompt", desc: "貼到 Claude/GPT" },
+                { k: "api", label: "🚀 API 直接生成", desc: "需 API key" },
+                { k: "template", label: "🎲 本地模板", desc: "純前端，離線可用" }
+              ].map(t => (
+                <button
+                  key={t.k}
+                  onClick={() => setAiMode(t.k)}
+                  className={`px-3 py-2 text-sm border-b-2 -mb-px transition ${
+                    aiMode === t.k
+                      ? "border-indigo-600 text-indigo-700 font-medium"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
+                  }`}
+                  title={t.desc}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Mode: export */}
+            {aiMode === "export" && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  產生一段完整 prompt，複製後貼到 <a href="https://claude.ai" target="_blank" className="text-indigo-600 underline">Claude.ai</a> 或 ChatGPT 生成歌詞。LLM 會回傳 JSON，再貼回來「📥 從 LLM 回應匯入」即可。
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleExportPrompt}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                  >
+                    產生 Prompt
+                  </button>
+                  {exportPrompt && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(exportPrompt);
+                        setCopied(p => ({ ...p, export: true }));
+                        setTimeout(() => setCopied(p => ({ ...p, export: false })), 1500);
+                      }}
+                      className={`px-4 py-2 rounded-md text-sm font-medium ${
+                        copied.export ? "bg-emerald-600 text-white" : "bg-slate-700 text-white hover:bg-slate-800"
+                      }`}
+                    >
+                      {copied.export ? "✓ 已複製" : "複製 Prompt"}
+                    </button>
+                  )}
+                </div>
+                {exportPrompt && (
+                  <textarea
+                    value={exportPrompt}
+                    readOnly
+                    rows={8}
+                    className="w-full p-3 rounded-md border border-slate-300 bg-slate-50 text-xs font-mono"
+                  />
+                )}
+                <details className="text-xs text-slate-600 bg-slate-50 rounded-md p-3 border border-slate-200">
+                  <summary className="cursor-pointer font-medium">📥 從 LLM 回應匯入歌詞（貼上 JSON）</summary>
+                  <textarea
+                    rows={5}
+                    placeholder='貼上 LLM 回傳的 JSON：{"sections": [...]}'
+                    onChange={e => {
+                      try {
+                        if (e.target.value.trim().length > 10) {
+                          applyGenerated(e.target.value);
+                          setGenError("");
+                        }
+                      } catch (err) {
+                        setGenError(`解析失敗：${err.message}`);
+                      }
+                    }}
+                    className="w-full mt-2 p-2 rounded border border-slate-300 bg-white text-xs font-mono"
+                  />
+                </details>
+              </div>
+            )}
+
+            {/* Mode: api */}
+            {aiMode === "api" && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">提供商</label>
+                    <select
+                      value={aiProvider}
+                      onChange={e => {
+                        setAiProvider(e.target.value);
+                        setApiModel("");
+                        setApiBaseUrl("");
+                      }}
+                      className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm"
+                    >
+                      {Object.entries(PROVIDERS).map(([k, v]) => (
+                        <option key={k} value={k}>{v.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">
+                      Model（留空用預設：{PROVIDERS[aiProvider].defaultModel}）
+                    </label>
+                    <input
+                      type="text"
+                      value={apiModel}
+                      onChange={e => setApiModel(e.target.value)}
+                      placeholder={PROVIDERS[aiProvider].defaultModel}
+                      className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-600 mb-1 block">API Key（儲存於本機 localStorage）</label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-600 mb-1 block">
+                    Base URL（選填，預設：{PROVIDERS[aiProvider].baseUrl}）
+                  </label>
+                  <input
+                    type="text"
+                    value={apiBaseUrl}
+                    onChange={e => setApiBaseUrl(e.target.value)}
+                    placeholder={PROVIDERS[aiProvider].baseUrl}
+                    className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm font-mono"
+                  />
+                </div>
+                <button
+                  onClick={handleApiGenerate}
+                  disabled={generating}
+                  className={`w-full py-2.5 rounded-md text-sm font-medium ${
+                    generating ? "bg-slate-300 text-slate-500" : "bg-indigo-600 text-white hover:bg-indigo-700"
+                  }`}
+                >
+                  {generating ? "🔄 生成中..." : "🚀 一鍵生成歌詞"}
+                </button>
+                <div className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                  ⚠️ 注意：API key 會以明文存於瀏覽器 localStorage。僅在自己電腦使用。共用電腦請改用「匯出 Prompt」模式。
+                </div>
+              </div>
+            )}
+
+            {/* Mode: template */}
+            {aiMode === "template" && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600">
+                  純前端詞庫填空，依當前情緒（{moods[0] || "希望"}）挑選意象詞 + 你的關鍵字組合。輸出為「草稿骨架」，需手動潤飾。
+                </p>
+                {!["華語(繁體)", "華語(簡體)"].includes(language) && language !== "純樂器(無歌詞)" && (
+                  <div className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                    ⚠️ 本地模板僅支援中文歌詞。當前語言：{language}，建議改用「📋 匯出 Prompt」或「🚀 API 直接生成」模式。
+                  </div>
+                )}
+                <button
+                  onClick={handleTemplateGenerate}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                >
+                  🎲 產生草稿（可重複生成換版本）
+                </button>
+              </div>
+            )}
+
+            {genError && (
+              <div className="mt-3 text-xs text-rose-700 bg-rose-50 p-2 rounded border border-rose-200">
+                {genError}
+              </div>
+            )}
+            {genSuccess && (
+              <div className="mt-3 text-sm text-emerald-700 bg-emerald-50 p-3 rounded border border-emerald-300 font-medium">
+                {genSuccess}
+              </div>
+            )}
+          </Section>
+
+          <div id="section-structure" />
+          <Section title="🧱 段落結構" hint="選擇骨架後可自由增刪、調整段落內容；段落描述用英文 v5.5 反應較準">
+            <div className="mb-3">
+              <SingleSelect options={STRUCTURE_TEMPLATES} value={structureName} onChange={applyStructure} />
+            </div>
+
+            <div className="space-y-3">
+              {sections.map((sec, idx) => (
+                <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                  <div className="flex gap-2 mb-2 items-center">
+                    <input
+                      type="text"
+                      value={sec.tag}
+                      onChange={e => updateSection(idx, "tag", e.target.value)}
+                      className="px-2 py-1 text-sm font-semibold rounded border border-slate-300 bg-white w-32"
+                      placeholder="Verse"
+                    />
+                    <input
+                      type="text"
+                      value={sec.desc}
+                      onChange={e => updateSection(idx, "desc", e.target.value)}
+                      className="flex-1 px-2 py-1 text-xs rounded border border-slate-300 bg-white text-slate-600"
+                      placeholder="段落描述（英文，例：rising tension, drums building）"
+                    />
+                    <button onClick={() => moveSection(idx, -1)} className="text-slate-400 hover:text-slate-700 px-1" title="上移">↑</button>
+                    <button onClick={() => moveSection(idx, 1)} className="text-slate-400 hover:text-slate-700 px-1" title="下移">↓</button>
+                    <button onClick={() => removeSection(idx)} className="text-rose-400 hover:text-rose-600 px-1" title="刪除">✕</button>
+                  </div>
+                  <textarea
+                    value={sec.lyrics}
+                    onChange={e => updateSection(idx, "lyrics", e.target.value)}
+                    rows={3}
+                    placeholder="輸入歌詞（中文/英文皆可，留空為純樂器段）"
+                    className="w-full px-2 py-1.5 text-sm rounded border border-slate-300 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none"
+                  />
+                  <div className="text-xs text-slate-400 mt-1 flex justify-between">
+                    <span>{sec.lyrics.length} 字</span>
+                    <span>{sec.lyrics.split('\n').filter(l => l.trim()).length} 行</span>
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={addSection}
+                className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:border-indigo-400 hover:text-indigo-600 text-sm"
+              >
+                + 新增段落
+              </button>
+            </div>
+            <div className="text-xs text-slate-500 mt-3">
+              總字數: <span className="font-semibold text-slate-700">{totalLyricsChars}</span> ｜ 段落數: <span className="font-semibold text-slate-700">{sections.length}</span>
+            </div>
+          </Section>
+        </div>
+
+        {/* 右欄：輸出 */}
+        <div className="lg:col-span-5">
+          <div className="lg:sticky lg:top-4">
+
+            <Section title="📤 Style Prompt" hint="複製到 Suno 的 Style 欄位｜v5.5 上限約 1000 字元">
+              <textarea
+                value={stylePrompt}
+                readOnly
+                rows={7}
+                className="w-full p-3 rounded-md border border-slate-300 bg-slate-50 text-sm font-mono"
+              />
+              <div className="flex justify-between items-center mt-2 text-xs">
+                <div className="space-x-2">
+                  <span className={styleWarn ? "text-rose-600 font-semibold" : "text-slate-500"}>
+                    {stylePrompt.length} 字元 {styleWarn && "（超過 1000，請精簡）"}
+                  </span>
+                  <span className={tagWarn ? "text-amber-600" : "text-slate-500"}>
+                    · {tagCount} tags {tagWarn && "（建議 8-15 個）"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => copy(stylePrompt, "style")}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium ${
+                    copied.style ? "bg-emerald-600 text-white" : "bg-indigo-600 text-white hover:bg-indigo-700"
+                  }`}
+                >
+                  {copied.style ? "✓ 已複製" : "複製 Style"}
+                </button>
+              </div>
+            </Section>
+
+            <Section title="📝 Lyrics" hint="複製到 Suno 的 Lyrics 欄位">
+              <textarea
+                value={lyricsPrompt}
+                readOnly
+                rows={14}
+                className="w-full p-3 rounded-md border border-slate-300 bg-slate-50 text-sm font-mono whitespace-pre-wrap"
+              />
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-xs text-slate-500">{lyricsPrompt.length} 字元</span>
+                <button
+                  onClick={() => copy(lyricsPrompt, "lyrics")}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium ${
+                    copied.lyrics ? "bg-emerald-600 text-white" : "bg-indigo-600 text-white hover:bg-indigo-700"
+                  }`}
+                >
+                  {copied.lyrics ? "✓ 已複製" : "複製 Lyrics"}
+                </button>
+              </div>
+            </Section>
+
+            <Section title="📦 完整 Prompt（含標題與分隔）">
+              <textarea
+                value={fullPrompt}
+                readOnly
+                rows={8}
+                className="w-full p-3 rounded-md border border-slate-300 bg-slate-50 text-xs font-mono"
+              />
+              <div className="flex justify-end mt-2">
+                <button
+                  onClick={() => copy(fullPrompt, "full")}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium ${
+                    copied.full ? "bg-emerald-600 text-white" : "bg-slate-700 text-white hover:bg-slate-800"
+                  }`}
+                >
+                  {copied.full ? "✓ 已複製" : "複製完整版"}
+                </button>
+              </div>
+            </Section>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 leading-relaxed">
+              <div className="font-semibold mb-2">💡 Suno v5.5 Prompt 心法</div>
+              <ul className="list-disc list-inside space-y-1">
+                <li><strong>四層架構</strong>：Tempo+Key → 樂器 → 人聲 → 製作紋理</li>
+                <li><strong>Negative Prompt 必加</strong>：no autotune / no synths 等</li>
+                <li><strong>具體形容詞</strong>：fingerpicked guitar 比 guitar 強很多</li>
+                <li><strong>Style 控制 1000 字內</strong>，tag 數 8-15 個最佳</li>
+                <li><strong>Subgenre &gt; 廣義 Genre</strong>：synthwave 比 electronic 準</li>
+                <li>切割感明顯時用 Inpaint 或 Extend 修補接點</li>
+                <li>啟用 Voice Clone 時略過人聲描述，避免衝突</li>
+                <li>歌詞段落 [tag] 用英文，內容可用中文</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer className="mt-8 text-center text-xs text-slate-400">
+        Suno Prompt Generator · v5.5 Optimized · {new Date().getFullYear()}
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
