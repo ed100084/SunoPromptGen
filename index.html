@@ -281,10 +281,25 @@ const IMAGE_BANK = {
   "緊張": ["心跳", "倒數", "緊握", "邊緣", "閃電", "對峙", "屏息", "迫近"]
 };
 
+// 語言（影響 Suno 人聲關鍵字與 AI 生成歌詞用語）
+const LANGUAGES = {
+  "華語(繁體)": { suno: "mandarin chinese vocals", llm: "繁體中文（台灣用語）" },
+  "華語(簡體)": { suno: "mandarin chinese vocals", llm: "簡體中文" },
+  "台語": { suno: "taiwanese hokkien vocals", llm: "台語（漢字書寫）" },
+  "粵語": { suno: "cantonese vocals", llm: "粵語（廣東話）" },
+  "英文": { suno: "english vocals", llm: "English" },
+  "日文": { suno: "japanese vocals", llm: "日文（漢字＋假名）" },
+  "韓文": { suno: "korean vocals", llm: "한국어 (Korean)" },
+  "西班牙文": { suno: "spanish vocals", llm: "Español (Spanish)" },
+  "中英混合": { suno: "mandarin and english bilingual vocals", llm: "中文為主、副歌穿插英文" },
+  "純樂器(無歌詞)": { suno: "instrumental, no vocals", llm: "（無，純樂器）" }
+};
+
 // 一鍵情境範本（泛用，去除特定行業情境）
 const SCENARIOS = {
   "華語抒情慢歌": {
     desc: "經典抒情主歌-副歌，深情女聲",
+    language: "華語(繁體)",
     genre: "華語抒情",
     moods: ["深情", "悲傷", "懷舊"],
     instruments: ["氈式鋼琴(Felt Piano)", "弦樂", "指彈原聲吉他"],
@@ -299,6 +314,7 @@ const SCENARIOS = {
   },
   "流行燃曲": {
     desc: "勵志正能量，副歌大編制",
+    language: "華語(繁體)",
     genre: "華語流行",
     moods: ["勵志", "希望", "活力"],
     instruments: ["暖音鋼琴", "弦樂", "緊湊鼓組", "破音電吉他"],
@@ -313,6 +329,7 @@ const SCENARIOS = {
   },
   "搖滾爆發": {
     desc: "硬派搖滾、燃系吉他主導",
+    language: "華語(繁體)",
     genre: "華語搖滾",
     moods: ["憤怒", "活力"],
     instruments: ["破音電吉他", "電貝斯", "緊湊鼓組"],
@@ -327,6 +344,7 @@ const SCENARIOS = {
   },
   "Lo-fi 讀書背景": {
     desc: "純樂器、放鬆、可循環",
+    language: "純樂器(無歌詞)",
     genre: "Lo-fi Hip Hop",
     moods: ["平靜", "懷舊", "夢幻"],
     instruments: ["暖音鋼琴", "黑膠鼓點", "立式低音貝斯"],
@@ -341,6 +359,7 @@ const SCENARIOS = {
   },
   "古風中國風": {
     desc: "國樂元素融合現代編曲",
+    language: "華語(繁體)",
     genre: "古風中國風",
     moods: ["懷舊", "深情", "莊重"],
     instruments: ["古箏", "二胡", "竹笛", "弦樂", "暖音鋼琴"],
@@ -355,6 +374,7 @@ const SCENARIOS = {
   },
   "Indie 民謠": {
     desc: "個人創作、原聲、敘事",
+    language: "華語(繁體)",
     genre: "Indie Folk",
     moods: ["溫暖", "懷舊", "孤獨"],
     instruments: ["指彈原聲吉他", "口琴", "暖音鋼琴", "立式低音貝斯"],
@@ -369,6 +389,7 @@ const SCENARIOS = {
   },
   "電影配樂": {
     desc: "管弦樂史詩感、純音樂",
+    language: "純樂器(無歌詞)",
     genre: "Cinematic",
     moods: ["神祕", "希望", "緊張", "莊重"],
     instruments: ["管弦樂團", "弦樂四重奏", "暖音鋼琴", "電影感效果"],
@@ -383,6 +404,7 @@ const SCENARIOS = {
   },
   "City Pop 復古": {
     desc: "80年代日式都會流行",
+    language: "日文",
     genre: "City Pop",
     moods: ["懷舊", "浪漫", "夢幻"],
     instruments: ["清音電吉他", "電貝斯", "復古合成器", "薩克斯風", "緊湊鼓組"],
@@ -397,6 +419,7 @@ const SCENARIOS = {
   },
   "EDM 派對": {
     desc: "電子節拍、Drop 主導",
+    language: "英文",
     genre: "EDM",
     moods: ["活力", "歡樂"],
     instruments: ["復古合成器", "鼓機", "808 Sub Bass", "氛圍墊音"],
@@ -411,6 +434,7 @@ const SCENARIOS = {
   },
   "氛圍環境": {
     desc: "純音樂氛圍墊底，可冥想/工作",
+    language: "純樂器(無歌詞)",
     genre: "Ambient",
     moods: ["平靜", "夢幻", "神祕"],
     instruments: ["氛圍墊音", "氈式鋼琴(Felt Piano)", "弦樂"],
@@ -496,6 +520,7 @@ function Section({ title, children, hint }) {
 
 function App() {
   const [scenario, setScenario] = useState("");
+  const [language, setLanguage] = useState("華語(繁體)");
   const [genre, setGenre] = useState("華語抒情");
   const [moods, setMoods] = useState(["溫暖"]);
   const [energy, setEnergy] = useState("中（穩定流動）");
@@ -544,6 +569,7 @@ function App() {
     if (!name) return;
     const s = SCENARIOS[name];
     setScenario(name);
+    if (s.language) setLanguage(s.language);
     setGenre(s.genre);
     setMoods(s.moods);
     setEnergy(s.energy);
@@ -594,6 +620,9 @@ function App() {
      + Negative constraints
      =========================================================== */
   const stylePrompt = useMemo(() => {
+    const isInstrumental = language === "純樂器(無歌詞)";
+    const langKw = LANGUAGES[language]?.suno || "";
+
     const layer1 = [];
     if (genre) layer1.push(GENRES[genre] || genre);
     if (bpm) layer1.push(`${bpm} BPM`);
@@ -603,9 +632,14 @@ function App() {
 
     const layer2 = instruments.map(i => INSTRUMENTS[i]).filter(Boolean).join(", ");
 
-    const layer3 = voiceCloneActive
-      ? ""  // 啟用 Voice Clone 時略過人聲描述（避免衝突）
-      : vocals.map(v => VOCALS[v]).filter(Boolean).join(", ");
+    // 人聲層：純樂器 → 強制 instrumental；否則加上語言關鍵字
+    let layer3 = "";
+    if (isInstrumental) {
+      layer3 = "instrumental, no vocals";
+    } else if (!voiceCloneActive) {
+      const vocalParts = [langKw, ...vocals.map(v => VOCALS[v]).filter(Boolean)];
+      layer3 = vocalParts.filter(Boolean).join(", ");
+    }
 
     const layer4 = textures.map(t => TEXTURES[t]).filter(Boolean).join(", ");
 
@@ -616,7 +650,7 @@ function App() {
     return [layer1.join(", "), layer2, layer3, layer4, cohesionPart, extra, negPart]
       .filter(Boolean)
       .join(", ");
-  }, [genre, bpm, musicKey, energy, moods, instruments, vocals, voiceCloneActive, textures, negatives, cohesion, extra]);
+  }, [language, genre, bpm, musicKey, energy, moods, instruments, vocals, voiceCloneActive, textures, negatives, cohesion, extra]);
 
   const lyricsPrompt = useMemo(() => {
     return sections.map(s => {
@@ -640,8 +674,28 @@ function App() {
     ).join("\n");
     const kwList = lyricsKeywords.split(/[,，、]/).map(k => k.trim()).filter(Boolean);
     const moodTxt = moods.join("、");
+    const langInfo = LANGUAGES[language]?.llm || "繁體中文";
+    const isInstrumental = language === "純樂器(無歌詞)";
 
-    return `你是一位專業華語歌詞作詞家。請依下列設定，創作一首完整的中文歌詞。
+    if (isInstrumental) {
+      return `這是一首純樂器作品，無歌詞。請回傳所有段落 lyrics 為空字串。
+
+【段落結構】
+${sectionList}
+
+【回傳格式】嚴格回傳下列 JSON，不要 markdown code fence、不要其他文字：
+{
+  "sections": [
+    {"tag": "段落標籤", "lyrics": ""},
+    ...
+  ]
+}`;
+    }
+
+    return `你是一位專業歌詞作詞家。請依下列設定，創作一首完整歌詞。
+
+【創作語言】${langInfo}
+（請使用此語言完成所有歌詞，不要混用其他語言，除非語言設定特別指明）
 
 【歌曲風格】
 ${stylePrompt}
@@ -664,10 +718,11 @@ ${sectionList}
 【創作原則】
 1. 用詞自然真摯，避免陳腔濫調與政治宗教敏感字眼
 2. 副歌（Chorus）需有強記憶點，重複段落歌詞可一致
-3. 每行字數均衡，建議 7-12 字一行
-4. 留意 ABAB 或 AABB 押韻
+3. 每行字數均衡（依語言調整）：中文 7-12 字、英文 6-10 syllables 為佳
+4. 留意押韻（ABAB 或 AABB）
 5. Bridge 段需與主副歌情感對比或情緒昇華
 6. 純樂器段（如 Intro / Outro / Solo）lyrics 欄位請回傳空字串 ""
+7. 嚴格使用指定的【創作語言】，不要自行翻譯為其他語言
 
 【回傳格式】嚴格回傳下列 JSON，不要 markdown code fence、不要其他文字、不要解釋：
 {
@@ -676,7 +731,7 @@ ${sectionList}
     ...
   ]
 }`;
-  }, [sections, lyricsTheme, lyricsKeywords, lyricsStory, moods, stylePrompt]);
+  }, [sections, lyricsTheme, lyricsKeywords, lyricsStory, moods, stylePrompt, language]);
 
   // 解析 LLM 回應並寫入 sections
   const applyGenerated = (text) => {
@@ -922,7 +977,7 @@ ${sectionList}
             </div>
           </Section>
 
-          <Section title="🎼 Layer 1：基本骨架（Tempo / Key / Genre / Energy）" hint="v5.5 第一層：tempo + key + 曲風 + 能量強度">
+          <Section title="🎼 Layer 1：基本骨架（Tempo / Key / Genre / Energy）" hint="v5.5 第一層：tempo + key + 曲風 + 能量強度 + 語言">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="text-xs text-slate-600 mb-1 block">歌曲標題（選填）</label>
@@ -935,8 +990,16 @@ ${sectionList}
                 />
               </div>
               <div>
+                <label className="text-xs text-slate-600 mb-1 block">🌐 語言 / 語系</label>
+                <SingleSelect options={LANGUAGES} value={language} onChange={setLanguage} />
+              </div>
+              <div>
                 <label className="text-xs text-slate-600 mb-1 block">曲風（建議 1-2 個 subgenre）</label>
                 <SingleSelect options={GENRES} value={genre} onChange={setGenre} />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">能量強度</label>
+                <SingleSelect options={ENERGY} value={energy} onChange={setEnergy} />
               </div>
               <div>
                 <label className="text-xs text-slate-600 mb-1 block">BPM（速度）</label>
@@ -959,10 +1022,11 @@ ${sectionList}
                 />
               </div>
             </div>
-            <div>
-              <label className="text-xs text-slate-600 mb-1 block">能量強度</label>
-              <SingleSelect options={ENERGY} value={energy} onChange={setEnergy} />
-            </div>
+            {language === "純樂器(無歌詞)" && (
+              <div className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                ⚠️ 純樂器模式：人聲區塊將被略過，歌詞段落會清空
+              </div>
+            )}
           </Section>
 
           <Section title="😌 情緒（建議 1-2 個）">
@@ -1219,6 +1283,11 @@ ${sectionList}
                 <p className="text-xs text-slate-600">
                   純前端詞庫填空，依當前情緒（{moods[0] || "希望"}）挑選意象詞 + 你的關鍵字組合。輸出為「草稿骨架」，需手動潤飾。
                 </p>
+                {!["華語(繁體)", "華語(簡體)"].includes(language) && language !== "純樂器(無歌詞)" && (
+                  <div className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                    ⚠️ 本地模板僅支援中文歌詞。當前語言：{language}，建議改用「📋 匯出 Prompt」或「🚀 API 直接生成」模式。
+                  </div>
+                )}
                 <button
                   onClick={handleTemplateGenerate}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
