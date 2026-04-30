@@ -524,6 +524,7 @@ function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [genSuccess, setGenSuccess] = useState("");
   const [exportPrompt, setExportPrompt] = useState("");
 
   // 載入儲存的 API 設定
@@ -688,6 +689,12 @@ ${sectionList}
       const m = parsed.sections.find(ps => ps.tag === s.tag) || parsed.sections[i];
       return m ? { ...s, lyrics: (m.lyrics || "").trim() } : s;
     }));
+    setGenSuccess(`✓ 已匯入 ${parsed.sections.length} 段歌詞，請往下查看「段落結構」`);
+    setTimeout(() => {
+      const el = document.getElementById("section-structure");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    setTimeout(() => setGenSuccess(""), 4000);
   };
 
   // 模式 1: 匯出 Prompt
@@ -767,6 +774,12 @@ ${sectionList}
       }
 
       applyGenerated(text);
+      setGenSuccess("✓ 已從 API 生成歌詞，請往下查看「段落結構」");
+      setTimeout(() => {
+        const el = document.getElementById("section-structure");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+      setTimeout(() => setGenSuccess(""), 4000);
 
       // 儲存設定
       localStorage.setItem("suno_api_key", apiKey);
@@ -784,6 +797,7 @@ ${sectionList}
   // 模式 3: 本地模板演算法
   const handleTemplateGenerate = () => {
     setGenError("");
+    setGenSuccess("");
     const moodKey = moods[0] || "希望";
     const bank = IMAGE_BANK[moodKey] || IMAGE_BANK["希望"];
     const kwList = lyricsKeywords.split(/[,，、]/).map(k => k.trim()).filter(Boolean);
@@ -793,49 +807,67 @@ ${sectionList}
     const pick = (n=1) => {
       const out = [];
       const used = new Set();
-      while (out.length < n && out.length < pool.length) {
+      let tries = 0;
+      while (out.length < n && tries < n * 10) {
         const w = pool[Math.floor(Math.random() * pool.length)];
         if (!used.has(w)) { used.add(w); out.push(w); }
+        tries++;
       }
-      while (out.length < n) out.push(pool[Math.floor(Math.random() * pool.length)]);
+      while (out.length < n) out.push(pool[Math.floor(Math.random() * pool.length)] || "光");
       return out;
     };
 
+    let filled = 0;
     setSections(prev => prev.map(s => {
-      const tag = s.tag.toLowerCase();
-      if (tag.includes("intro") || tag.includes("outro") || tag.includes("solo") || tag.includes("section")) {
+      const tag = (s.tag || "").toLowerCase();
+      // 純樂器段
+      if (tag.includes("intro") || tag.includes("outro") || tag.includes("solo") ||
+          /\b[ab]\s*section\b/.test(tag)) {
         return { ...s, lyrics: "" };
       }
-      if (tag.includes("chorus") || tag.includes("drop")) {
+      // 注意：Pre-Chorus 必須在 Chorus 前判斷
+      if (tag.includes("pre")) {
         const [w1, w2] = pick(2);
+        filled++;
         return { ...s, lyrics:
-          `${theme} ${theme}\n` +
-          `是${w1}最美的${w2}\n` +
-          `讓我記住這一刻\n` +
-          `讓${theme}永遠停留` };
+          `當${w1}點亮整個${w2}\n` +
+          `我聽見心跳的方向` };
       }
       if (tag.includes("bridge")) {
         const [w1, w2, w3] = pick(3);
+        filled++;
         return { ...s, lyrics:
           `如果${w1}終究會${w2}\n` +
           `至少還有${w3}陪我走\n` +
           `這一刻的擁有\n` +
           `就是答案` };
       }
-      if (tag.includes("pre")) {
+      if (tag.includes("chorus") || tag.includes("drop")) {
         const [w1, w2] = pick(2);
+        filled++;
         return { ...s, lyrics:
-          `當${w1}點亮整個${w2}\n` +
-          `我聽見心跳的方向` };
+          `${theme} ${theme}\n` +
+          `是${w1}最美的${w2}\n` +
+          `讓我記住這一刻\n` +
+          `讓${theme}永遠停留` };
       }
-      // Verse
+      // Verse / 其他
       const [w1, w2, w3, w4] = pick(4);
+      filled++;
       return { ...s, lyrics:
         `${w1}飄散在${w2}的午後\n` +
         `我看見${w3}在${w4}閃爍\n` +
         `走過${w2}的時候想起你\n` +
         `風裡有${w1}的味道` };
     }));
+
+    setGenSuccess(`✓ 已產生 ${filled} 段歌詞草稿，請往下查看「段落結構」`);
+    // 自動 scroll 到段落結構
+    setTimeout(() => {
+      const el = document.getElementById("section-structure");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    setTimeout(() => setGenSuccess(""), 4000);
   };
 
   const copy = (text, key) => {
@@ -1201,8 +1233,14 @@ ${sectionList}
                 {genError}
               </div>
             )}
+            {genSuccess && (
+              <div className="mt-3 text-sm text-emerald-700 bg-emerald-50 p-3 rounded border border-emerald-300 font-medium">
+                {genSuccess}
+              </div>
+            )}
           </Section>
 
+          <div id="section-structure" />
           <Section title="🧱 段落結構" hint="選擇骨架後可自由增刪、調整段落內容；段落描述用英文 v5.5 反應較準">
             <div className="mb-3">
               <SingleSelect options={STRUCTURE_TEMPLATES} value={structureName} onChange={applyStructure} />
