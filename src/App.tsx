@@ -30,6 +30,7 @@ import { MultiSelectChips } from './components/MultiSelectChips';
 import { SingleSelect } from './components/SingleSelect';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { ThemeToggle } from './components/ThemeToggle';
+import { LyricsAnalyzer } from './components/LyricsAnalyzer';
 
 const DEFAULT_STATE: SongState = {
   songTitle: '',
@@ -66,6 +67,9 @@ export function App() {
   const [genError, setGenError] = useState('');
   const [genSuccess, setGenSuccess] = useState('');
   const [exportPrompt, setExportPrompt] = useState('');
+  const [streamText, setStreamText] = useState('');
+  const [streamCtrl, setStreamCtrl] = useState<AbortController | null>(null);
+  const [useStreaming, setUseStreaming] = useState(true);
   const [copied, setCopied] = useState<Record<string, boolean>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
@@ -191,6 +195,9 @@ export function App() {
     }
     setGenerating(true);
     setGenError('');
+    setStreamText('');
+    const ctrl = new AbortController();
+    setStreamCtrl(ctrl);
     try {
       const text = await callLlm({
         provider: aiProvider,
@@ -198,6 +205,8 @@ export function App() {
         model: apiModel,
         baseUrl: apiBaseUrl,
         prompt: buildLlmRequestPrompt(state, stylePrompt),
+        signal: ctrl.signal,
+        onChunk: useStreaming ? (_delta, acc) => setStreamText(acc) : undefined,
       });
       const parsed = parseLlmResponse(text);
       setState((s) => ({
@@ -212,11 +221,21 @@ export function App() {
       localStorage.setItem('suno_api_model', apiModel || PROVIDERS[aiProvider].defaultModel);
       localStorage.setItem('suno_api_base', apiBaseUrl || PROVIDERS[aiProvider].baseUrl);
       showSuccess(`✓ 已從 API 生成歌詞（${parsed.sections.length} 段）`);
+      setStreamText('');
     } catch (err) {
-      setGenError(`生成失敗：${(err as Error).message}`);
+      if ((err as Error).name === 'AbortError') {
+        setGenError('已中止');
+      } else {
+        setGenError(`生成失敗：${(err as Error).message}`);
+      }
     } finally {
       setGenerating(false);
+      setStreamCtrl(null);
     }
+  };
+
+  const handleAbort = () => {
+    streamCtrl?.abort();
   };
 
   const handleTemplateGenerate = () => {
@@ -645,17 +664,46 @@ export function App() {
                       className="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-sm font-mono"
                     />
                   </div>
-                  <button
-                    onClick={handleApiGenerate}
-                    disabled={generating}
-                    className={`w-full py-2.5 rounded-md text-sm font-medium ${
-                      generating
-                        ? 'bg-slate-300 dark:bg-slate-700 text-slate-500'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                    }`}
-                  >
-                    {generating ? '🔄 生成中...' : '🚀 一鍵生成歌詞'}
-                  </button>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={useStreaming}
+                      onChange={(e) => setUseStreaming(e.target.checked)}
+                      className="w-4 h-4 accent-indigo-600"
+                    />
+                    Streaming（即時顯示生成內容，可中斷）
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleApiGenerate}
+                      disabled={generating}
+                      className={`flex-1 py-2.5 rounded-md text-sm font-medium ${
+                        generating
+                          ? 'bg-slate-300 dark:bg-slate-700 text-slate-500'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      }`}
+                    >
+                      {generating ? '🔄 生成中...' : '🚀 一鍵生成歌詞'}
+                    </button>
+                    {generating && streamCtrl && (
+                      <button
+                        onClick={handleAbort}
+                        className="px-4 py-2.5 rounded-md text-sm font-medium bg-rose-600 text-white hover:bg-rose-700"
+                      >
+                        ⏹ 中止
+                      </button>
+                    )}
+                  </div>
+                  {streamText && generating && (
+                    <details open className="text-xs">
+                      <summary className="cursor-pointer text-slate-500">
+                        即時輸出（{streamText.length} 字）
+                      </summary>
+                      <pre className="mt-1 p-2 bg-slate-900 text-emerald-300 rounded overflow-auto max-h-48 text-xs whitespace-pre-wrap break-words">
+                        {streamText}
+                      </pre>
+                    </details>
+                  )}
                   <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 p-2 rounded border border-amber-200 dark:border-amber-800">
                     ⚠️ API key 以明文存於 localStorage，僅在自己電腦使用
                   </div>
@@ -753,6 +801,7 @@ export function App() {
                       <span>{sec.lyrics.length} 字</span>
                       <span>{sec.lyrics.split('\n').filter((l) => l.trim()).length} 行</span>
                     </div>
+                    {sec.lyrics.trim() && <LyricsAnalyzer lyrics={sec.lyrics} tag={sec.tag} />}
                   </div>
                 ))}
                 <button
