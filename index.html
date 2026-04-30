@@ -235,6 +235,52 @@ const STRUCTURE_TEMPLATES = {
   ]
 };
 
+// LLM 提供商設定
+const PROVIDERS = {
+  openrouter: {
+    name: "OpenRouter（推薦）",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "anthropic/claude-sonnet-4.5",
+    type: "openai"
+  },
+  openai: {
+    name: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-4o-mini",
+    type: "openai"
+  },
+  anthropic: {
+    name: "Anthropic Direct",
+    baseUrl: "https://api.anthropic.com",
+    defaultModel: "claude-sonnet-4-5-20250929",
+    type: "anthropic"
+  },
+  gemini: {
+    name: "Google Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    defaultModel: "gemini-2.5-flash",
+    type: "gemini"
+  }
+};
+
+// 本地模板用：意象詞庫（依情緒分類）
+const IMAGE_BANK = {
+  "溫暖": ["陽光", "微風", "懷裡", "笑容", "燭光", "相依", "平凡", "安然"],
+  "悲傷": ["雨夜", "影子", "破碎", "遠去", "沉默", "枯萎", "蒼白", "失落"],
+  "勵志": ["晨曦", "彼岸", "翅膀", "勇敢", "綻放", "向前", "光芒", "蛻變"],
+  "懷舊": ["巷口", "舊照", "夏天", "信箋", "斑駁", "斜陽", "曾經", "腳印"],
+  "浪漫": ["星空", "心跳", "眼神", "擁抱", "溫柔", "緣分", "凝望", "守候"],
+  "希望": ["黎明", "種子", "天空", "綻開", "等待", "答案", "可能", "未來"],
+  "孤獨": ["深夜", "城市", "燈光", "獨行", "回聲", "空曠", "雨聲", "窗外"],
+  "夢幻": ["雲端", "幻影", "迷霧", "彩虹", "星河", "漂浮", "倒影", "夢境"],
+  "神祕": ["古老", "迷宮", "暗影", "低語", "未知", "符號", "鏡中", "邊界"],
+  "活力": ["奔跑", "燃燒", "節拍", "汗水", "閃耀", "突破", "瘋狂", "前進"],
+  "深情": ["心底", "誓言", "歲月", "輪廓", "守望", "牽掛", "凝結", "眷戀"],
+  "歡樂": ["笑聲", "派對", "雀躍", "舞動", "輕快", "歡呼", "彩帶", "陽光"],
+  "莊重": ["時光", "信仰", "山河", "歸屬", "肩膀", "傳承", "見證", "永恆"],
+  "緊張": ["心跳", "倒數", "緊握", "邊緣", "閃電", "對峙", "屏息", "迫近"]
+};
+
 // 一鍵情境範本（泛用，去除特定行業情境）
 const SCENARIOS = {
   "華語抒情慢歌": {
@@ -465,7 +511,32 @@ function App() {
   const [sections, setSections] = useState(STRUCTURE_TEMPLATES["抒情骨架 (Intro-V-C-V-C-B-C)"]);
   const [songTitle, setSongTitle] = useState("");
   const [voiceCloneActive, setVoiceCloneActive] = useState(false);
-  const [copied, setCopied] = useState({ style: false, lyrics: false, full: false });
+  const [copied, setCopied] = useState({ style: false, lyrics: false, full: false, export: false });
+
+  // 歌詞 AI 生成相關 state
+  const [lyricsTheme, setLyricsTheme] = useState("");
+  const [lyricsKeywords, setLyricsKeywords] = useState("");
+  const [lyricsStory, setLyricsStory] = useState("");
+  const [aiMode, setAiMode] = useState("export"); // export | api | template
+  const [aiProvider, setAiProvider] = useState("openrouter");
+  const [apiKey, setApiKey] = useState("");
+  const [apiModel, setApiModel] = useState("");
+  const [apiBaseUrl, setApiBaseUrl] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [exportPrompt, setExportPrompt] = useState("");
+
+  // 載入儲存的 API 設定
+  useEffect(() => {
+    const k = localStorage.getItem("suno_api_key");
+    const p = localStorage.getItem("suno_api_provider");
+    const m = localStorage.getItem("suno_api_model");
+    const b = localStorage.getItem("suno_api_base");
+    if (k) setApiKey(k);
+    if (p) setAiProvider(p);
+    if (m) setApiModel(m);
+    if (b) setApiBaseUrl(b);
+  }, []);
 
   // 套用情境範本
   const applyScenario = (name) => {
@@ -558,6 +629,214 @@ function App() {
     const t = songTitle ? `Title: ${songTitle}\n\n` : "";
     return `${t}--- STYLE ---\n${stylePrompt}\n\n--- LYRICS ---\n${lyricsPrompt}`;
   }, [songTitle, stylePrompt, lyricsPrompt]);
+
+  /* ========== 歌詞生成核心 ========== */
+
+  // 建立 LLM Prompt
+  const buildLyricsPrompt = useCallback(() => {
+    const sectionList = sections.map(s =>
+      `- [${s.tag}]${s.desc ? ` (${s.desc})` : ""}`
+    ).join("\n");
+    const kwList = lyricsKeywords.split(/[,，、]/).map(k => k.trim()).filter(Boolean);
+    const moodTxt = moods.join("、");
+
+    return `你是一位專業華語歌詞作詞家。請依下列設定，創作一首完整的中文歌詞。
+
+【歌曲風格】
+${stylePrompt}
+
+【歌曲主題】
+${lyricsTheme || "（自由發揮）"}
+
+【關鍵字】
+${kwList.length ? kwList.join("、") : "（無）"}
+
+【故事背景】
+${lyricsStory || "（無）"}
+
+【情緒基調】
+${moodTxt || "（依風格自由發揮）"}
+
+【段落結構】請依下列段落順序創作，每段需配合段落特性（如 Verse 鋪陳敘事、Chorus 情感高峰、Bridge 轉折昇華）：
+${sectionList}
+
+【創作原則】
+1. 用詞自然真摯，避免陳腔濫調與政治宗教敏感字眼
+2. 副歌（Chorus）需有強記憶點，重複段落歌詞可一致
+3. 每行字數均衡，建議 7-12 字一行
+4. 留意 ABAB 或 AABB 押韻
+5. Bridge 段需與主副歌情感對比或情緒昇華
+6. 純樂器段（如 Intro / Outro / Solo）lyrics 欄位請回傳空字串 ""
+
+【回傳格式】嚴格回傳下列 JSON，不要 markdown code fence、不要其他文字、不要解釋：
+{
+  "sections": [
+    {"tag": "段落標籤需與上方完全一致", "lyrics": "歌詞內容，換行用 \\n"},
+    ...
+  ]
+}`;
+  }, [sections, lyricsTheme, lyricsKeywords, lyricsStory, moods, stylePrompt]);
+
+  // 解析 LLM 回應並寫入 sections
+  const applyGenerated = (text) => {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("找不到 JSON 內容");
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed.sections)) throw new Error("JSON 缺少 sections 陣列");
+
+    setSections(prev => prev.map((s, i) => {
+      const m = parsed.sections.find(ps => ps.tag === s.tag) || parsed.sections[i];
+      return m ? { ...s, lyrics: (m.lyrics || "").trim() } : s;
+    }));
+  };
+
+  // 模式 1: 匯出 Prompt
+  const handleExportPrompt = () => {
+    setExportPrompt(buildLyricsPrompt());
+    setGenError("");
+  };
+
+  // 模式 2: API 直接呼叫
+  const handleApiGenerate = async () => {
+    if (!apiKey.trim()) { setGenError("請填入 API key"); return; }
+    setGenerating(true);
+    setGenError("");
+
+    const cfg = PROVIDERS[aiProvider];
+    const model = apiModel.trim() || cfg.defaultModel;
+    const baseUrl = apiBaseUrl.trim() || cfg.baseUrl;
+    const prompt = buildLyricsPrompt();
+
+    try {
+      let text = "";
+
+      if (cfg.type === "openai") {
+        const headers = {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        };
+        if (aiProvider === "openrouter") {
+          headers["HTTP-Referer"] = "https://github.com/ed100084/SunoPromptGen";
+          headers["X-Title"] = "Suno Prompt Generator";
+        }
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.8,
+            max_tokens: 2000
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+        text = data.choices[0].message.content;
+
+      } else if (cfg.type === "anthropic") {
+        const res = await fetch(`${baseUrl}/v1/messages`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true"
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 2000,
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+        text = data.content[0].text;
+
+      } else if (cfg.type === "gemini") {
+        const res = await fetch(`${baseUrl}/models/${model}:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.8, maxOutputTokens: 2000 }
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+        text = data.candidates[0].content.parts[0].text;
+      }
+
+      applyGenerated(text);
+
+      // 儲存設定
+      localStorage.setItem("suno_api_key", apiKey);
+      localStorage.setItem("suno_api_provider", aiProvider);
+      localStorage.setItem("suno_api_model", model);
+      localStorage.setItem("suno_api_base", baseUrl);
+
+    } catch (err) {
+      setGenError(`生成失敗：${err.message}`);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // 模式 3: 本地模板演算法
+  const handleTemplateGenerate = () => {
+    setGenError("");
+    const moodKey = moods[0] || "希望";
+    const bank = IMAGE_BANK[moodKey] || IMAGE_BANK["希望"];
+    const kwList = lyricsKeywords.split(/[,，、]/).map(k => k.trim()).filter(Boolean);
+    const pool = [...kwList, ...bank];
+    const theme = lyricsTheme.trim() || "心之所向";
+
+    const pick = (n=1) => {
+      const out = [];
+      const used = new Set();
+      while (out.length < n && out.length < pool.length) {
+        const w = pool[Math.floor(Math.random() * pool.length)];
+        if (!used.has(w)) { used.add(w); out.push(w); }
+      }
+      while (out.length < n) out.push(pool[Math.floor(Math.random() * pool.length)]);
+      return out;
+    };
+
+    setSections(prev => prev.map(s => {
+      const tag = s.tag.toLowerCase();
+      if (tag.includes("intro") || tag.includes("outro") || tag.includes("solo") || tag.includes("section")) {
+        return { ...s, lyrics: "" };
+      }
+      if (tag.includes("chorus") || tag.includes("drop")) {
+        const [w1, w2] = pick(2);
+        return { ...s, lyrics:
+          `${theme} ${theme}\n` +
+          `是${w1}最美的${w2}\n` +
+          `讓我記住這一刻\n` +
+          `讓${theme}永遠停留` };
+      }
+      if (tag.includes("bridge")) {
+        const [w1, w2, w3] = pick(3);
+        return { ...s, lyrics:
+          `如果${w1}終究會${w2}\n` +
+          `至少還有${w3}陪我走\n` +
+          `這一刻的擁有\n` +
+          `就是答案` };
+      }
+      if (tag.includes("pre")) {
+        const [w1, w2] = pick(2);
+        return { ...s, lyrics:
+          `當${w1}點亮整個${w2}\n` +
+          `我聽見心跳的方向` };
+      }
+      // Verse
+      const [w1, w2, w3, w4] = pick(4);
+      return { ...s, lyrics:
+        `${w1}飄散在${w2}的午後\n` +
+        `我看見${w3}在${w4}閃爍\n` +
+        `走過${w2}的時候想起你\n` +
+        `風裡有${w1}的味道` };
+    }));
+  };
 
   const copy = (text, key) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -717,6 +996,211 @@ function App() {
               placeholder="例：90s style, retro synth, japanese city pop influence"
               className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm"
             />
+          </Section>
+
+          <Section title="🎨 AI 歌詞生成" hint="生成內容會自動填入下方段落，純樂器段（Intro/Outro）會留空">
+            <div className="grid grid-cols-1 gap-3 mb-4">
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">主題句</label>
+                <input
+                  type="text"
+                  value={lyricsTheme}
+                  onChange={e => setLyricsTheme(e.target.value)}
+                  placeholder="例：離職送別、第一次心動、走過低潮"
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">關鍵字（用逗號分隔）</label>
+                <input
+                  type="text"
+                  value={lyricsKeywords}
+                  onChange={e => setLyricsKeywords(e.target.value)}
+                  placeholder="例：回憶, 感謝, 未來, 並肩"
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">故事背景（選填）</label>
+                <textarea
+                  value={lyricsStory}
+                  onChange={e => setLyricsStory(e.target.value)}
+                  rows={3}
+                  placeholder="描述歌曲背後的情境、角色、時空、情感弧線..."
+                  className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Mode tabs */}
+            <div className="flex gap-1 mb-3 border-b border-slate-200">
+              {[
+                { k: "export", label: "📋 匯出 Prompt", desc: "貼到 Claude/GPT" },
+                { k: "api", label: "🚀 API 直接生成", desc: "需 API key" },
+                { k: "template", label: "🎲 本地模板", desc: "純前端，離線可用" }
+              ].map(t => (
+                <button
+                  key={t.k}
+                  onClick={() => setAiMode(t.k)}
+                  className={`px-3 py-2 text-sm border-b-2 -mb-px transition ${
+                    aiMode === t.k
+                      ? "border-indigo-600 text-indigo-700 font-medium"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
+                  }`}
+                  title={t.desc}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Mode: export */}
+            {aiMode === "export" && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  產生一段完整 prompt，複製後貼到 <a href="https://claude.ai" target="_blank" className="text-indigo-600 underline">Claude.ai</a> 或 ChatGPT 生成歌詞。LLM 會回傳 JSON，再貼回來「📥 從 LLM 回應匯入」即可。
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleExportPrompt}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                  >
+                    產生 Prompt
+                  </button>
+                  {exportPrompt && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(exportPrompt);
+                        setCopied(p => ({ ...p, export: true }));
+                        setTimeout(() => setCopied(p => ({ ...p, export: false })), 1500);
+                      }}
+                      className={`px-4 py-2 rounded-md text-sm font-medium ${
+                        copied.export ? "bg-emerald-600 text-white" : "bg-slate-700 text-white hover:bg-slate-800"
+                      }`}
+                    >
+                      {copied.export ? "✓ 已複製" : "複製 Prompt"}
+                    </button>
+                  )}
+                </div>
+                {exportPrompt && (
+                  <textarea
+                    value={exportPrompt}
+                    readOnly
+                    rows={8}
+                    className="w-full p-3 rounded-md border border-slate-300 bg-slate-50 text-xs font-mono"
+                  />
+                )}
+                <details className="text-xs text-slate-600 bg-slate-50 rounded-md p-3 border border-slate-200">
+                  <summary className="cursor-pointer font-medium">📥 從 LLM 回應匯入歌詞（貼上 JSON）</summary>
+                  <textarea
+                    rows={5}
+                    placeholder='貼上 LLM 回傳的 JSON：{"sections": [...]}'
+                    onChange={e => {
+                      try {
+                        if (e.target.value.trim().length > 10) {
+                          applyGenerated(e.target.value);
+                          setGenError("");
+                        }
+                      } catch (err) {
+                        setGenError(`解析失敗：${err.message}`);
+                      }
+                    }}
+                    className="w-full mt-2 p-2 rounded border border-slate-300 bg-white text-xs font-mono"
+                  />
+                </details>
+              </div>
+            )}
+
+            {/* Mode: api */}
+            {aiMode === "api" && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">提供商</label>
+                    <select
+                      value={aiProvider}
+                      onChange={e => {
+                        setAiProvider(e.target.value);
+                        setApiModel("");
+                        setApiBaseUrl("");
+                      }}
+                      className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm"
+                    >
+                      {Object.entries(PROVIDERS).map(([k, v]) => (
+                        <option key={k} value={k}>{v.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">
+                      Model（留空用預設：{PROVIDERS[aiProvider].defaultModel}）
+                    </label>
+                    <input
+                      type="text"
+                      value={apiModel}
+                      onChange={e => setApiModel(e.target.value)}
+                      placeholder={PROVIDERS[aiProvider].defaultModel}
+                      className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-600 mb-1 block">API Key（儲存於本機 localStorage）</label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-600 mb-1 block">
+                    Base URL（選填，預設：{PROVIDERS[aiProvider].baseUrl}）
+                  </label>
+                  <input
+                    type="text"
+                    value={apiBaseUrl}
+                    onChange={e => setApiBaseUrl(e.target.value)}
+                    placeholder={PROVIDERS[aiProvider].baseUrl}
+                    className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm font-mono"
+                  />
+                </div>
+                <button
+                  onClick={handleApiGenerate}
+                  disabled={generating}
+                  className={`w-full py-2.5 rounded-md text-sm font-medium ${
+                    generating ? "bg-slate-300 text-slate-500" : "bg-indigo-600 text-white hover:bg-indigo-700"
+                  }`}
+                >
+                  {generating ? "🔄 生成中..." : "🚀 一鍵生成歌詞"}
+                </button>
+                <div className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                  ⚠️ 注意：API key 會以明文存於瀏覽器 localStorage。僅在自己電腦使用。共用電腦請改用「匯出 Prompt」模式。
+                </div>
+              </div>
+            )}
+
+            {/* Mode: template */}
+            {aiMode === "template" && (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600">
+                  純前端詞庫填空，依當前情緒（{moods[0] || "希望"}）挑選意象詞 + 你的關鍵字組合。輸出為「草稿骨架」，需手動潤飾。
+                </p>
+                <button
+                  onClick={handleTemplateGenerate}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                >
+                  🎲 產生草稿（可重複生成換版本）
+                </button>
+              </div>
+            )}
+
+            {genError && (
+              <div className="mt-3 text-xs text-rose-700 bg-rose-50 p-2 rounded border border-rose-200">
+                {genError}
+              </div>
+            )}
           </Section>
 
           <Section title="🧱 段落結構" hint="選擇骨架後可自由增刪、調整段落內容；段落描述用英文 v5.5 反應較準">

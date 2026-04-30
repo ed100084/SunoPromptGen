@@ -13,6 +13,10 @@
 - **一鍵情境範本** — 抒情慢歌、流行燃曲、搖滾爆發、Lo-fi 讀書、古風中國風、Indie 民謠、電影配樂、City Pop、EDM 派對、氛圍環境
 - **Voice Clone 模式** — 啟用後自動略過人聲描述，避免衝突
 - **即時字元/tag 數警示** — Style 控制 1000 字內、tag 數 8-15 個
+- **AI 歌詞生成（三模式）**
+  - 📋 匯出 Prompt：產生完整 prompt 貼到 Claude/ChatGPT，再貼回 JSON 自動填入
+  - 🚀 API 直接生成：支援 OpenRouter / OpenAI / Anthropic / Gemini，一鍵填入所有段落
+  - 🎲 本地模板：純前端意象詞庫填空，離線可用
 
 ## Usage
 
