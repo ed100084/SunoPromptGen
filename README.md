@@ -30,10 +30,29 @@
 
 ## Tech Stack
 
-- React 18 (CDN)
-- Tailwind CSS (CDN)
-- Babel Standalone (JSX 即時編譯)
-- 純前端，無需 build / 後端
+- **React 18** + **TypeScript 5.7**（strict mode）
+- **Vite 6** build & dev server
+- **Tailwind CSS 3.4**（含 dark mode）
+- 模組化架構：data / lib / components / hooks 分層
+- localStorage 歷史紀錄（最多 50 筆，可匯出/匯入 JSON）
+
+## Development
+
+```bash
+npm install
+npm run dev      # 本地開發 http://localhost:5173
+npm run build    # 產出 dist/
+npm run preview  # 預覽生產版本
+```
+
+## Deployment
+
+部署到 GitHub Pages（自動）：見 `.github/workflows/deploy.yml`，每次 push 到 main 會自動建置部署。
+
+啟用步驟：
+1. GitHub Repo → Settings → Pages → Source 選 `GitHub Actions`
+2. push 後等待 workflow 完成
+3. 訪問 `https://ed100084.github.io/SunoPromptGen/`
 
 ## Reference
 
