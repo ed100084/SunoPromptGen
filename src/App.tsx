@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ENERGY,
   GENRES,
@@ -25,6 +25,7 @@ import { callLlm } from './lib/llm';
 import { generateTemplateLyrics } from './lib/template';
 import { addEntry } from './lib/history';
 import { useTheme } from './hooks/useTheme';
+import { useApiSettings } from './hooks/useApiSettings';
 import { Section as SectionBlock } from './components/Section';
 import { MultiSelectChips } from './components/MultiSelectChips';
 import { SingleSelect } from './components/SingleSelect';
@@ -59,10 +60,17 @@ export function App() {
   const [state, setState] = useState<SongState>(DEFAULT_STATE);
   const [scenario, setScenario] = useState('');
   const [aiMode, setAiMode] = useState<AiMode>('export');
-  const [aiProvider, setAiProvider] = useState('openrouter');
-  const [apiKey, setApiKey] = useState('');
-  const [apiModel, setApiModel] = useState('');
-  const [apiBaseUrl, setApiBaseUrl] = useState('');
+  const {
+    provider: aiProvider,
+    apiKey,
+    model: apiModel,
+    baseUrl: apiBaseUrl,
+    setProvider: setAiProvider,
+    setApiKey,
+    setModel: setApiModel,
+    setBaseUrl: setApiBaseUrl,
+    persist: persistApiSettings,
+  } = useApiSettings();
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
   const [genSuccess, setGenSuccess] = useState('');
@@ -73,18 +81,6 @@ export function App() {
   const [copied, setCopied] = useState<Record<string, boolean>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
-
-  // 載入儲存的 API 設定
-  useEffect(() => {
-    const k = localStorage.getItem('suno_api_key');
-    const p = localStorage.getItem('suno_api_provider');
-    const m = localStorage.getItem('suno_api_model');
-    const b = localStorage.getItem('suno_api_base');
-    if (k) setApiKey(k);
-    if (p) setAiProvider(p);
-    if (m) setApiModel(m);
-    if (b) setApiBaseUrl(b);
-  }, []);
 
   // 部分 setter helper
   const update = <K extends keyof SongState>(key: K, value: SongState[K]) => {
@@ -216,10 +212,7 @@ export function App() {
           return m ? { ...sec, lyrics: (m.lyrics || '').trim() } : sec;
         }),
       }));
-      localStorage.setItem('suno_api_key', apiKey);
-      localStorage.setItem('suno_api_provider', aiProvider);
-      localStorage.setItem('suno_api_model', apiModel || PROVIDERS[aiProvider].defaultModel);
-      localStorage.setItem('suno_api_base', apiBaseUrl || PROVIDERS[aiProvider].baseUrl);
+      persistApiSettings();
       showSuccess(`✓ 已從 API 生成歌詞（${parsed.sections.length} 段）`);
       setStreamText('');
     } catch (err) {

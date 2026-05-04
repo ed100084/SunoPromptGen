@@ -1,27 +1,16 @@
 import type { HistoryEntry, SongState } from '../types';
+import { STORAGE_KEYS, getJSON, setJSON, removeItem } from './storage';
 
-const STORAGE_KEY = 'suno_history_v1';
 const MAX_ENTRIES = 50;
 
 export function loadHistory(): HistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data)) return [];
-    return data;
-  } catch {
-    return [];
-  }
+  const data = getJSON<HistoryEntry[]>(STORAGE_KEYS.history, []);
+  return Array.isArray(data) ? data : [];
 }
 
 export function saveHistory(entries: HistoryEntry[]): void {
-  try {
-    const trimmed = entries.slice(0, MAX_ENTRIES);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-  } catch (err) {
-    console.error('History save failed:', err);
-  }
+  const trimmed = entries.slice(0, MAX_ENTRIES);
+  setJSON(STORAGE_KEYS.history, trimmed);
 }
 
 export function addEntry(state: SongState, stylePrompt: string, lyricsPrompt: string): HistoryEntry {
@@ -44,7 +33,7 @@ export function deleteEntry(id: string): void {
 }
 
 export function clearAll(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  removeItem(STORAGE_KEYS.history);
 }
 
 export function exportAll(): string {
