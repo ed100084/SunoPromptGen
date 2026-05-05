@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   ENERGY,
   GENRES,
@@ -14,18 +15,50 @@ import type { SongState } from '../types';
 import { Section as SectionBlock } from './Section';
 import { SingleSelect } from './SingleSelect';
 import { MultiSelectChips } from './MultiSelectChips';
+import { SuggestionStrip } from './SuggestionStrip';
+import {
+  buildSuggestionContext,
+  suggestForField,
+  type SuggestableField,
+} from '../lib/tagSuggestions';
+import { loadHistory } from '../lib/history';
 
 interface Props {
   state: SongState;
   scenario: string;
   onApplyScenario: (name: string) => void;
   onUpdate: <K extends keyof SongState>(key: K, value: SongState[K]) => void;
+  /** 變動時觸發重新計算（例如儲存到歷史後）。 */
+  suggestionRefreshKey?: number;
 }
 
 /**
  * 左欄上半：情境範本 + Layer 1-4（曲風 / 情緒 / 樂器 / 人聲 / 紋理 / Negative / 連貫性 / 額外）。
+ * 各 multi-select 下方顯示「💡 常搭配」推薦條（從 SCENARIOS + 4★+ 歷史紀錄計算）。
  */
-export function StyleBuilderPanel({ state, scenario, onApplyScenario, onUpdate }: Props) {
+export function StyleBuilderPanel({
+  state,
+  scenario,
+  onApplyScenario,
+  onUpdate,
+  suggestionRefreshKey,
+}: Props) {
+  // 推薦上下文（依當前狀態與歷史紀錄重算）
+  const ctx = useMemo(
+    () => buildSuggestionContext(SCENARIOS, loadHistory()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [suggestionRefreshKey],
+  );
+
+  const recsFor = (field: SuggestableField) => suggestForField(ctx, field, state, 4);
+
+  const addTo = (field: SuggestableField, tag: string) => {
+    const current = state[field] as string[];
+    if (!current.includes(tag)) {
+      onUpdate(field, [...current, tag] as SongState[typeof field]);
+    }
+  };
+
   return (
     <>
       <SectionBlock title="🎯 一鍵情境範本" hint="選擇後自動填入所有欄位，再依需要微調">
@@ -115,6 +148,11 @@ export function StyleBuilderPanel({ state, scenario, onApplyScenario, onUpdate }
           onChange={(v) => onUpdate('moods', v)}
           color="rose"
         />
+        <SuggestionStrip
+          suggestions={recsFor('moods')}
+          onPick={(t) => addTo('moods', t)}
+          color="rose"
+        />
       </SectionBlock>
 
       <SectionBlock
@@ -125,6 +163,11 @@ export function StyleBuilderPanel({ state, scenario, onApplyScenario, onUpdate }
           options={INSTRUMENTS}
           selected={state.instruments}
           onChange={(v) => onUpdate('instruments', v)}
+          color="emerald"
+        />
+        <SuggestionStrip
+          suggestions={recsFor('instruments')}
+          onPick={(t) => addTo('instruments', t)}
           color="emerald"
         />
       </SectionBlock>
@@ -151,12 +194,19 @@ export function StyleBuilderPanel({ state, scenario, onApplyScenario, onUpdate }
           </span>
         </label>
         {!state.voiceCloneActive && (
-          <MultiSelectChips
-            options={VOCALS}
-            selected={state.vocals}
-            onChange={(v) => onUpdate('vocals', v)}
-            color="indigo"
-          />
+          <>
+            <MultiSelectChips
+              options={VOCALS}
+              selected={state.vocals}
+              onChange={(v) => onUpdate('vocals', v)}
+              color="indigo"
+            />
+            <SuggestionStrip
+              suggestions={recsFor('vocals')}
+              onPick={(t) => addTo('vocals', t)}
+              color="indigo"
+            />
+          </>
         )}
         {state.voiceCloneActive && (
           <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
@@ -175,6 +225,11 @@ export function StyleBuilderPanel({ state, scenario, onApplyScenario, onUpdate }
           onChange={(v) => onUpdate('textures', v)}
           color="amber"
         />
+        <SuggestionStrip
+          suggestions={recsFor('textures')}
+          onPick={(t) => addTo('textures', t)}
+          color="amber"
+        />
       </SectionBlock>
 
       <SectionBlock
@@ -185,6 +240,11 @@ export function StyleBuilderPanel({ state, scenario, onApplyScenario, onUpdate }
           options={NEGATIVES}
           selected={state.negatives}
           onChange={(v) => onUpdate('negatives', v)}
+          color="red"
+        />
+        <SuggestionStrip
+          suggestions={recsFor('negatives')}
+          onPick={(t) => addTo('negatives', t)}
           color="red"
         />
       </SectionBlock>

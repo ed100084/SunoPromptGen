@@ -278,6 +278,7 @@ export function App() {
               scenario={scenario}
               onApplyScenario={applyScenario}
               onUpdate={update}
+              suggestionRefreshKey={historyRefresh}
             />
 
             <AiGeneratorPanel

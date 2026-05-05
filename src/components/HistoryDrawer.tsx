@@ -9,6 +9,7 @@ import {
   updateEntryResult,
 } from '../lib/history';
 import { computeRatingStats, exportHistoryAsCsv } from '../lib/csvExport';
+import { exportEntryAsMarkdown, safeFilename } from '../lib/markdownExport';
 import { RatingEditor } from './RatingEditor';
 
 interface Props {
@@ -91,6 +92,10 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
       exportHistoryAsCsv(entries),
       'text/csv;charset=utf-8',
     );
+  };
+
+  const handleExportMd = (e: HistoryEntry) => {
+    downloadFile(safeFilename(e.title, 'md'), exportEntryAsMarkdown(e), 'text/markdown;charset=utf-8');
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -368,6 +373,13 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
                           title="評分 / 筆記"
                         >
                           ⭐ {rating ? '編輯' : '評分'}
+                        </button>
+                        <button
+                          onClick={() => handleExportMd(e)}
+                          className="px-3 py-1.5 text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+                          title="匯出 Markdown"
+                        >
+                          📄
                         </button>
                       </div>
                     )}

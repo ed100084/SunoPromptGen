@@ -19,6 +19,11 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 - **22 個情境範本** — 華語抒情、流行燃曲、搖滾爆發、Lo-fi 讀書、古風中國風、Indie 民謠、電影配樂、City Pop、EDM 派對、氛圍環境、K-Pop 偶像舞曲、R&B 慢板、華語嘻哈、Synthwave 80s、House 律動、Bossa Nova 咖啡、Pop Punk 熱血、Funk 派對、Dream Pop 迷幻、Acoustic 純粹、粵語金曲、童趣兒歌
 - **段落結構模板** — 標準流行、抒情骨架、電子流行 Drop、搖滾骨架、簡短版、極簡 V-C、純樂器 Loop
 
+### 🧠 智能推薦（差異化功能）
+- **Tag 共現推薦** — 從 22 個情境範本 + 4★+ 歷史紀錄統計，使用者選了一個情緒/樂器/紋理，自動推薦常一起出現但尚未選的 tag
+- 每個 multi-select 下方顯示 `💡 常搭配：[+鋼琴] [+弦樂] ...` 一鍵加入
+- 5★ 歷史權重加倍，越用越懂你的口味
+
 ### 📝 歌詞工具
 - **AI 歌詞生成（三模式）**
   - 📋 匯出 Prompt：產生完整 prompt 貼到 Claude/ChatGPT，再貼回 JSON 自動填入
@@ -31,13 +36,16 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 ### 🔍 結構視圖（v5.5 教學）
 Style Prompt 區塊提供「文字 / 結構」雙 tab，把 prompt 拆成各層 tag chips，幫助理解四層架構。
 
-### 📊 歷史紀錄 + 結果回饋（差異化功能）
+### 📊 歷史紀錄 + 結果回饋
 - **本機歷史** — localStorage 最多 50 筆，可匯出/匯入 JSON
 - **Prompt Diff 對比** — 任選兩筆紀錄並排對比 tag 差異 + LCS 行級歌詞 diff + 欄位變動表
 - **⭐ 結果回填評分** — 對每首生成結果打 1-5 星 + 音檔連結 + 筆記
 - **統計卡片** — 「共 N 筆 · 已評分 X · 平均 Y★」
 - **評分篩選器** — 全部 / 5★ / 4★+ / 已評 / 未評
-- **CSV 匯出** — 21 欄位（rating / prompt / genre / moods / instruments...），可丟 Excel/Sheets 分析自己的成功 patterns
+- **多種匯出**：
+  - 📄 **Markdown** — 單筆作品完整文件（標題/評分/metadata/Style/Lyrics），可貼到 Notion / 部落格
+  - 📊 **CSV** — 21 欄位 dataset，可丟 Excel/Sheets 分析自己的成功 patterns
+  - 📦 **JSON** — 完整備份/還原
 
 ### 🎨 介面
 - **🌗 Dark mode** — 自動跟隨系統，可手動切換
@@ -77,30 +85,33 @@ npm run lint     # 型別檢查
 - **Tailwind CSS 3.4** — 含 dark mode
 - **vite-plugin-pwa** — Service Worker + 離線快取
 - **pinyin-pro** — 中文押韻分析
-- **Vitest 4** — 258 個測試覆蓋核心邏輯
+- **Vitest 4** — 298 個測試覆蓋核心邏輯（含押韻、diff、共現演算法、CSV/Markdown 匯出）
 - 模組化架構：`data / lib / components / hooks` + `lib/sunoVersions/`
 
 ### 專案結構
 
 ```
 src/
-├── components/         # 11 個 React 元件
+├── components/         # 12+ React 元件
 │   ├── AppHeader / StyleBuilderPanel / AiGeneratorPanel
 │   ├── SectionsEditor / OutputPanel
 │   ├── HistoryDrawer / DiffViewer / RatingEditor
+│   ├── SuggestionStrip   # 💡 常搭配推薦條
 │   └── LyricsAnalyzer / MultiSelectChips / SingleSelect / ...
 ├── hooks/              # useTheme / useApiSettings
 ├── lib/
 │   ├── sunoVersions/   # 版本抽象層（v5_5.ts 是真理之源）
-│   ├── promptBuilder.ts   # 委託給 active version
-│   ├── llm.ts             # 多家 LLM provider 統一介面
-│   ├── rhyme.ts           # 中文押韻 14 韻系
-│   ├── analyze.ts         # 字數 / 標準差
-│   ├── diff.ts            # Tag set + LCS line diff
-│   ├── csvExport.ts       # 評分 dataset CSV
-│   ├── history.ts         # localStorage 持久化
-│   ├── storage.ts         # 集中 storage helper
-│   └── template.ts        # 離線意象詞庫填詞
+│   ├── promptBuilder.ts    # 委託給 active version
+│   ├── llm.ts              # 多家 LLM provider 統一介面
+│   ├── rhyme.ts            # 中文押韻 14 韻系
+│   ├── analyze.ts          # 字數 / 標準差
+│   ├── diff.ts             # Tag set + LCS line diff
+│   ├── tagSuggestions.ts   # 共現推薦演算法
+│   ├── csvExport.ts        # 評分 dataset CSV
+│   ├── markdownExport.ts   # 單筆作品 Markdown 匯出
+│   ├── history.ts          # localStorage 持久化
+│   ├── storage.ts          # 集中 storage helper
+│   └── template.ts         # 離線意象詞庫填詞
 ├── data.ts             # 情境範本 / 段落骨架 / Provider config
 ├── types.ts            # SongState / HistoryEntry / SongResult
 └── App.tsx             # 350 行 - 純元件組裝
