@@ -5,6 +5,17 @@ import { VitePWA } from 'vite-plugin-pwa';
 // GH Pages 子目錄部署需設定 base 為 /<repo>/
 export default defineConfig({
   base: '/SunoPromptGen/',
+  build: {
+    rollupOptions: {
+      output: {
+        // 拆分主要相依套件成獨立 chunk，提升首次載入速度與快取命中率
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'pinyin': ['pinyin-pro'],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

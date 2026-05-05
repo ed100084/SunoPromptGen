@@ -5,7 +5,7 @@
  */
 
 import type { LanguageInfo, SongState } from '../../types';
-import type { SunoVersion } from './types';
+import type { StyleLayer, SunoVersion } from './types';
 
 // ───────── Vocab ─────────
 
@@ -167,7 +167,11 @@ const LANGUAGES: Record<string, LanguageInfo> = {
 
 // ───────── Builder（v5.5 四層架構） ─────────
 
-function buildStylePrompt(s: SongState): string {
+/**
+ * 產生結構化的層級資料。buildStylePrompt 把這個結果攤平成字串；
+ * UI 也可直接渲染分層視圖。
+ */
+function buildStyleLayers(s: SongState): StyleLayer[] {
   const isInstrumental = s.language === '純樂器(無歌詞)';
   const langKw = LANGUAGES[s.language]?.suno || '';
 
@@ -177,43 +181,57 @@ function buildStylePrompt(s: SongState): string {
   if (s.bpm) layer1.push(`${s.bpm} BPM`);
   if (s.musicKey) layer1.push(`key of ${s.musicKey}`);
   if (s.energy) layer1.push(ENERGY[s.energy] || s.energy);
-  if (s.moods.length)
-    layer1.push(
-      s.moods
-        .map((m) => MOODS[m])
-        .filter(Boolean)
-        .join(', '),
-    );
+  if (s.moods.length) {
+    const moodTags = s.moods.map((m) => MOODS[m]).filter(Boolean);
+    if (moodTags.length) layer1.push(moodTags.join(', '));
+  }
 
   // Layer 2: 樂器配置
-  const layer2 = s.instruments
-    .map((i) => INSTRUMENTS[i])
-    .filter(Boolean)
-    .join(', ');
+  const layer2 = s.instruments.map((i) => INSTRUMENTS[i]).filter(Boolean);
 
   // Layer 3: 人聲方向（Voice Clone 啟用時略過）
-  let layer3 = '';
+  const layer3: string[] = [];
   if (isInstrumental) {
-    layer3 = 'instrumental, no vocals';
+    layer3.push('instrumental, no vocals');
   } else if (!s.voiceCloneActive) {
-    const vocalParts = [langKw, ...s.vocals.map((v) => VOCALS[v]).filter(Boolean)];
-    layer3 = vocalParts.filter(Boolean).join(', ');
+    if (langKw) layer3.push(langKw);
+    layer3.push(...s.vocals.map((v) => VOCALS[v]).filter(Boolean));
   }
 
   // Layer 4: 製作紋理
-  const layer4 = s.textures
-    .map((t) => TEXTURES[t])
-    .filter(Boolean)
-    .join(', ');
+  const layer4 = s.textures.map((t) => TEXTURES[t]).filter(Boolean);
 
-  // Negatives & 連貫性
-  const negPart = s.negatives
-    .map((n) => NEGATIVES[n])
-    .filter(Boolean)
-    .join(', ');
-  const cohesionPart = s.cohesion ? COHESION_KEYWORDS : '';
+  // 連貫性
+  const cohesion = s.cohesion ? [COHESION_KEYWORDS] : [];
 
-  return [layer1.join(', '), layer2, layer3, layer4, cohesionPart, s.extra, negPart]
+  // 額外關鍵字（使用者自由填寫）
+  const extra = s.extra.trim()
+    ? s.extra
+        .split(/[,，]/)
+        .map((x) => x.trim())
+        .filter(Boolean)
+    : [];
+
+  // Negatives
+  const negs = s.negatives.map((n) => NEGATIVES[n]).filter(Boolean);
+
+  const layers: StyleLayer[] = [
+    { label: '🎼 Layer 1', hint: '基本骨架（曲風 / 速度 / 調性 / 能量 / 情緒）', tags: layer1 },
+    { label: '🎸 Layer 2', hint: '樂器配置', tags: layer2 },
+    { label: '🎤 Layer 3', hint: '人聲方向', tags: layer3 },
+    { label: '🎚️ Layer 4', hint: '製作風格 / 紋理', tags: layer4 },
+    { label: '✨ 連貫性', hint: '抗切割感關鍵字', tags: cohesion },
+    { label: '➕ 額外', hint: '使用者自訂', tags: extra },
+    { label: '🚫 Negatives', hint: '反向約束', tags: negs },
+  ];
+
+  // 過濾空層
+  return layers.filter((l) => l.tags.length > 0);
+}
+
+function buildStylePrompt(s: SongState): string {
+  return buildStyleLayers(s)
+    .map((l) => l.tags.join(', '))
     .filter(Boolean)
     .join(', ');
 }
@@ -241,6 +259,7 @@ export const sunoV5_5: SunoVersion = {
   },
 
   buildStylePrompt,
+  buildStyleLayers,
 
   promptTips: [
     '四層架構：Tempo+Key → 樂器 → 人聲 → 製作紋理',

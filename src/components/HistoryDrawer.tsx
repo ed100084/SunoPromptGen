@@ -1,6 +1,15 @@
-import { useState } from 'react';
-import type { HistoryEntry } from '../types';
-import { clearAll, deleteEntry, exportAll, importAll, loadHistory } from '../lib/history';
+import { useMemo, useState } from 'react';
+import type { HistoryEntry, SongResult } from '../types';
+import {
+  clearAll,
+  deleteEntry,
+  exportAll,
+  importAll,
+  loadHistory,
+  updateEntryResult,
+} from '../lib/history';
+import { computeRatingStats, exportHistoryAsCsv } from '../lib/csvExport';
+import { RatingEditor } from './RatingEditor';
 
 interface Props {
   open: boolean;
@@ -11,22 +20,37 @@ interface Props {
   refreshKey: number;
 }
 
+type RatingFilter = 'all' | 'rated' | 'unrated' | 4 | 5;
+
 export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: Props) {
   const [entries, setEntries] = useState<HistoryEntry[]>(() => loadHistory());
   const [compareMode, setCompareMode] = useState(false);
   /** 對比模式下被選取的 entry id（順序代表 A=index 0, B=index 1）。 */
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  /** 正在編輯評分的 entry id；null 表示沒有任何項目展開。 */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<RatingFilter>('all');
 
   // 重新讀取（外部觸發 refresh 時）
   if (refreshKey !== undefined) {
     // noop - just to depend on refreshKey
   }
 
+  const stats = useMemo(() => computeRatingStats(entries), [entries]);
+
+  const filteredEntries = useMemo(() => {
+    if (filter === 'all') return entries;
+    if (filter === 'rated') return entries.filter((e) => e.result?.rating);
+    if (filter === 'unrated') return entries.filter((e) => !e.result?.rating);
+    return entries.filter((e) => (e.result?.rating ?? 0) >= filter);
+  }, [entries, filter]);
+
   const handleDelete = (id: string) => {
     if (!confirm('確定刪除這筆紀錄？')) return;
     deleteEntry(id);
     setEntries(loadHistory());
     setSelectedIds((s) => s.filter((x) => x !== id));
+    if (editingId === id) setEditingId(null);
   };
 
   const handleClear = () => {
@@ -34,17 +58,39 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
     clearAll();
     setEntries([]);
     setSelectedIds([]);
+    setEditingId(null);
   };
 
-  const handleExport = () => {
-    const json = exportAll();
-    const blob = new Blob([json], { type: 'application/json' });
+  const handleSaveResult = (id: string, result: SongResult | null) => {
+    updateEntryResult(id, result);
+    setEntries(loadHistory());
+    setEditingId(null);
+  };
+
+  const downloadFile = (filename: string, content: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `suno-history-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportJson = () => {
+    downloadFile(
+      `suno-history-${new Date().toISOString().slice(0, 10)}.json`,
+      exportAll(),
+      'application/json',
+    );
+  };
+
+  const handleExportCsv = () => {
+    downloadFile(
+      `suno-history-${new Date().toISOString().slice(0, 10)}.csv`,
+      exportHistoryAsCsv(entries),
+      'text/csv;charset=utf-8',
+    );
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,6 +110,7 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
   const toggleCompareMode = () => {
     setCompareMode((m) => !m);
     setSelectedIds([]);
+    setEditingId(null);
   };
 
   const toggleSelect = (id: string) => {
@@ -110,6 +157,25 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
           </button>
         </header>
 
+        {/* 統計卡片 */}
+        {stats.total > 0 && (
+          <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/40 text-xs flex justify-between items-center">
+            <div className="text-slate-600 dark:text-slate-300">
+              共 <span className="font-semibold">{stats.total}</span> 筆 · 已評分{' '}
+              <span className="font-semibold">{stats.rated}</span>
+              {stats.rated > 0 && (
+                <>
+                  {' '}
+                  · 平均{' '}
+                  <span className="font-semibold text-amber-600">
+                    {stats.averageRating.toFixed(1)}★
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-2 text-xs">
           <button
             onClick={toggleCompareMode}
@@ -119,25 +185,58 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
-            🔍 對比模式{compareMode ? ' (開啟)' : ''}
+            🔍 對比{compareMode ? ' (開)' : ''}
           </button>
           <button
-            onClick={handleExport}
+            onClick={handleExportJson}
             className="px-3 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
           >
-            ⬇ 匯出 JSON
+            ⬇ JSON
+          </button>
+          <button
+            onClick={handleExportCsv}
+            className="px-3 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
+          >
+            ⬇ CSV
           </button>
           <label className="px-3 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer">
-            ⬆ 匯入 JSON
+            ⬆ 匯入
             <input type="file" accept=".json" className="hidden" onChange={handleImport} />
           </label>
           <button
             onClick={handleClear}
             className="px-3 py-1 rounded-md bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/50"
           >
-            🗑️ 清空全部
+            🗑️
           </button>
         </div>
+
+        {/* 評分篩選 */}
+        {stats.total > 0 && !compareMode && (
+          <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-1 text-xs">
+            {(
+              [
+                { v: 'all' as const, label: `全部 (${stats.total})` },
+                { v: 5 as const, label: `5★ (${stats.byStar[5]})` },
+                { v: 4 as const, label: `4★+ (${stats.byStar[4] + stats.byStar[5]})` },
+                { v: 'rated' as const, label: `已評 (${stats.rated})` },
+                { v: 'unrated' as const, label: `未評 (${stats.total - stats.rated})` },
+              ] as Array<{ v: RatingFilter; label: string }>
+            ).map((opt) => (
+              <button
+                key={String(opt.v)}
+                onClick={() => setFilter(opt.v)}
+                className={`px-2 py-0.5 rounded ${
+                  filter === opt.v
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {compareMode && (
           <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-indigo-50/60 dark:bg-indigo-950/30">
@@ -159,13 +258,17 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
         )}
 
         <div className="flex-1 overflow-y-auto p-3">
-          {entries.length === 0 ? (
-            <div className="text-center text-sm text-slate-400 py-12">尚無紀錄</div>
+          {filteredEntries.length === 0 ? (
+            <div className="text-center text-sm text-slate-400 py-12">
+              {entries.length === 0 ? '尚無紀錄' : '沒有符合篩選的紀錄'}
+            </div>
           ) : (
             <ul className="space-y-2">
-              {entries.map((e) => {
+              {filteredEntries.map((e) => {
                 const selectedIdx = selectedIds.indexOf(e.id);
                 const isSelected = selectedIdx >= 0;
+                const isEditing = editingId === e.id;
+                const rating = e.result?.rating;
                 return (
                   <li
                     key={e.id}
@@ -175,7 +278,7 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
                         : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'
                     }`}
                   >
-                    <div className="flex justify-between items-start gap-2 mb-2">
+                    <div className="flex justify-between items-start gap-2 mb-1">
                       <div className="font-medium text-sm text-slate-800 dark:text-slate-100 truncate flex-1">
                         {compareMode && isSelected && (
                           <span className="inline-block px-1.5 py-0.5 mr-1.5 bg-indigo-600 text-white text-[10px] rounded font-bold">
@@ -194,13 +297,50 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
                         </button>
                       )}
                     </div>
+
+                    {/* 星等顯示 + 音檔連結 */}
+                    {!isEditing && (rating || e.result?.audioUrl || e.result?.notes) && (
+                      <div className="text-xs mb-1.5 space-y-0.5">
+                        {rating && (
+                          <div className="text-amber-500 font-mono">
+                            {'★'.repeat(rating)}
+                            <span className="text-slate-300 dark:text-slate-600">
+                              {'★'.repeat(5 - rating)}
+                            </span>
+                          </div>
+                        )}
+                        {e.result?.audioUrl && (
+                          <a
+                            href={e.result.audioUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-indigo-600 dark:text-indigo-400 hover:underline truncate block"
+                          >
+                            🎵 {e.result.audioUrl.replace(/^https?:\/\//, '').slice(0, 36)}
+                          </a>
+                        )}
+                        {e.result?.notes && (
+                          <div className="text-slate-600 dark:text-slate-300 italic line-clamp-2">
+                            {e.result.notes}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
                       {new Date(e.savedAt).toLocaleString('zh-TW')}
                     </div>
                     <div className="text-xs text-slate-600 dark:text-slate-300 mb-2 line-clamp-2 font-mono">
                       {e.stylePrompt.slice(0, 120)}...
                     </div>
-                    {compareMode ? (
+
+                    {isEditing ? (
+                      <RatingEditor
+                        value={e.result}
+                        onSave={(r) => handleSaveResult(e.id, r)}
+                        onCancel={() => setEditingId(null)}
+                      />
+                    ) : compareMode ? (
                       <button
                         onClick={() => toggleSelect(e.id)}
                         className={`w-full py-1.5 text-xs rounded ${
@@ -212,15 +352,24 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
                         {isSelected ? `✓ 已選為 ${selectedIdx === 0 ? 'A' : 'B'}` : '選取對比'}
                       </button>
                     ) : (
-                      <button
-                        onClick={() => {
-                          onLoad(e);
-                          onClose();
-                        }}
-                        className="w-full py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                      >
-                        ↩ 載入此紀錄
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            onLoad(e);
+                            onClose();
+                          }}
+                          className="flex-1 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                        >
+                          ↩ 載入
+                        </button>
+                        <button
+                          onClick={() => setEditingId(e.id)}
+                          className="px-3 py-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded hover:bg-amber-200 dark:hover:bg-amber-900/50"
+                          title="評分 / 筆記"
+                        >
+                          ⭐ {rating ? '編輯' : '評分'}
+                        </button>
+                      </div>
                     )}
                   </li>
                 );

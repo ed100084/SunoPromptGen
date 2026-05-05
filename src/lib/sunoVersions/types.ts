@@ -8,6 +8,15 @@
 
 import type { LanguageInfo, SongState } from '../../types';
 
+export interface StyleLayer {
+  /** 在 UI 顯示的標籤，例如 'Layer 1', '✨ 連貫性', '🚫 Negatives'。 */
+  label: string;
+  /** 簡短說明，例如「基本骨架」。 */
+  hint?: string;
+  /** 這層產生的 tag 列表（已查表為英文）。 */
+  tags: string[];
+}
+
 export interface SunoVersionConstraints {
   /** Style prompt 字元上限（用於 UI 警示）。 */
   maxStyleLength: number;
@@ -45,6 +54,12 @@ export interface SunoVersion {
    * 未來版本可能改為其他結構。
    */
   buildStylePrompt: (state: SongState) => string;
+
+  /**
+   * 把 style prompt 拆解成各層級資訊（用於 UI 視覺化教學）。
+   * 順序代表畫面顯示順序；若該層為空可省略。
+   */
+  buildStyleLayers: (state: SongState) => StyleLayer[];
 
   /** 心法提示，顯示於 UI 右下角。 */
   promptTips: string[];

@@ -325,6 +325,7 @@ export function App() {
           {/* === 右欄 === */}
           <div className="lg:col-span-5">
             <OutputPanel
+              state={state}
               stylePrompt={stylePrompt}
               lyricsPrompt={lyricsPrompt}
               fullPrompt={fullPrompt}

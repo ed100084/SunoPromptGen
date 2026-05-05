@@ -1,4 +1,4 @@
-import type { HistoryEntry, SongState } from '../types';
+import type { HistoryEntry, SongResult, SongState } from '../types';
 import { STORAGE_KEYS, getJSON, setJSON, removeItem } from './storage';
 
 const MAX_ENTRIES = 50;
@@ -30,6 +30,23 @@ export function addEntry(state: SongState, stylePrompt: string, lyricsPrompt: st
 export function deleteEntry(id: string): void {
   const all = loadHistory();
   saveHistory(all.filter((e) => e.id !== id));
+}
+
+/**
+ * 更新某筆紀錄的 Suno 生成結果（評分、音檔連結、筆記）。
+ * 傳入 null 則移除 result。
+ */
+export function updateEntryResult(id: string, result: SongResult | null): void {
+  const all = loadHistory();
+  const next = all.map((e) => {
+    if (e.id !== id) return e;
+    if (result === null) {
+      const { result: _, ...rest } = e;
+      return rest;
+    }
+    return { ...e, result: { ...result, ratedAt: Date.now() } };
+  });
+  saveHistory(next);
 }
 
 export function clearAll(): void {
