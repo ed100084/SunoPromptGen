@@ -17,7 +17,7 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 - **Voice Clone 模式** — 啟用後自動略過人聲描述
 - **即時字元 / tag 數警示** — 1000 字以內、建議 8-15 tags
 - **22 個情境範本** — 華語抒情、流行燃曲、搖滾爆發、Lo-fi 讀書、古風中國風、Indie 民謠、電影配樂、City Pop、EDM 派對、氛圍環境、K-Pop 偶像舞曲、R&B 慢板、華語嘻哈、Synthwave 80s、House 律動、Bossa Nova 咖啡、Pop Punk 熱血、Funk 派對、Dream Pop 迷幻、Acoustic 純粹、粵語金曲、童趣兒歌
-- **段落結構模板** — 標準流行、抒情骨架、電子流行 Drop、搖滾骨架、簡短版、極簡 V-C、純樂器 Loop
+- **15 種段落結構模板** — 標準流行、抒情骨架、電子流行 Drop、搖滾骨架、簡短版、極簡 V-C、純樂器 Loop、Hip-Hop 結構、K-Pop 舞曲（含 Dance Break）、EDM 完整版（Buildup-Drop）、AABA 32-bar 爵士標準、古風敘事長篇、Funk Vamp、童謠循環、Folk 敘事
 
 ### 🧠 智能推薦（差異化功能）
 - **Tag 共現推薦** — 從 22 個情境範本 + 4★+ 歷史紀錄統計，使用者選了一個情緒/樂器/紋理，自動推薦常一起出現但尚未選的 tag
@@ -46,6 +46,15 @@ Style Prompt 區塊提供「文字 / 結構」雙 tab，把 prompt 拆成各層 
   - 📄 **Markdown** — 單筆作品完整文件（標題/評分/metadata/Style/Lyrics），可貼到 Notion / 部落格
   - 📊 **CSV** — 21 欄位 dataset，可丟 Excel/Sheets 分析自己的成功 patterns
   - 📦 **JSON** — 完整備份/還原
+
+### 📈 成功 Patterns 儀表板
+利用累積評分自動分析「什麼真的在你身上有用」：
+
+- **Lift 分數演算法** — 不只「你常用什麼」，而是「在高分中比整體更常出現多少」（過濾掉純使用頻率噪音）
+- **★★ / ★ / · / ↓** 視覺化每個 tag 的相關強度
+- **評分分布橫條圖**、**BPM 甜蜜點**、**Style Prompt 長度範圍**
+- 4★+ / 5★ 切換閾值
+- 資料 < 3 筆高分時顯示 onboarding 訊息，避免誤導性洞察
 
 ### 🎨 介面
 - **🌗 Dark mode** — 自動跟隨系統，可手動切換
@@ -85,7 +94,7 @@ npm run lint     # 型別檢查
 - **Tailwind CSS 3.4** — 含 dark mode
 - **vite-plugin-pwa** — Service Worker + 離線快取
 - **pinyin-pro** — 中文押韻分析
-- **Vitest 4** — 298 個測試覆蓋核心邏輯（含押韻、diff、共現演算法、CSV/Markdown 匯出）
+- **Vitest 4** — 312 個測試覆蓋核心邏輯（押韻、diff、共現/洞察演算法、CSV/Markdown 匯出）
 - 模組化架構：`data / lib / components / hooks` + `lib/sunoVersions/`
 
 ### 專案結構
@@ -96,6 +105,7 @@ src/
 │   ├── AppHeader / StyleBuilderPanel / AiGeneratorPanel
 │   ├── SectionsEditor / OutputPanel
 │   ├── HistoryDrawer / DiffViewer / RatingEditor
+│   ├── InsightsDashboard # 📈 成功 Patterns 儀表板
 │   ├── SuggestionStrip   # 💡 常搭配推薦條
 │   └── LyricsAnalyzer / MultiSelectChips / SingleSelect / ...
 ├── hooks/              # useTheme / useApiSettings
@@ -107,6 +117,7 @@ src/
 │   ├── analyze.ts          # 字數 / 標準差
 │   ├── diff.ts             # Tag set + LCS line diff
 │   ├── tagSuggestions.ts   # 共現推薦演算法
+│   ├── insights.ts         # 成功 Patterns lift 分析
 │   ├── csvExport.ts        # 評分 dataset CSV
 │   ├── markdownExport.ts   # 單筆作品 Markdown 匯出
 │   ├── history.ts          # localStorage 持久化

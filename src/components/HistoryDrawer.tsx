@@ -18,12 +18,14 @@ interface Props {
   onLoad: (entry: HistoryEntry) => void;
   /** 觸發開啟對比視圖。傳入兩筆 entries（A 為基準、B 為對比）。 */
   onCompare: (a: HistoryEntry, b: HistoryEntry) => void;
+  /** 觸發開啟成功 Patterns 儀表板。 */
+  onOpenInsights: () => void;
   refreshKey: number;
 }
 
 type RatingFilter = 'all' | 'rated' | 'unrated' | 4 | 5;
 
-export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: Props) {
+export function HistoryDrawer({ open, onClose, onLoad, onCompare, onOpenInsights, refreshKey }: Props) {
   const [entries, setEntries] = useState<HistoryEntry[]>(() => loadHistory());
   const [compareMode, setCompareMode] = useState(false);
   /** 對比模式下被選取的 entry id（順序代表 A=index 0, B=index 1）。 */
@@ -191,6 +193,13 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, refreshKey }: 
             }`}
           >
             🔍 對比{compareMode ? ' (開)' : ''}
+          </button>
+          <button
+            onClick={onOpenInsights}
+            className="px-3 py-1 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50"
+            title="成功 Patterns 儀表板"
+          >
+            📈 洞察
           </button>
           <button
             onClick={handleExportJson}

@@ -15,6 +15,8 @@ import { useTheme } from './hooks/useTheme';
 import { useApiSettings } from './hooks/useApiSettings';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { DiffViewer } from './components/DiffViewer';
+import { InsightsDashboard } from './components/InsightsDashboard';
+import { loadHistory } from './lib/history';
 import { AppHeader } from './components/AppHeader';
 import { StyleBuilderPanel } from './components/StyleBuilderPanel';
 import { AiGeneratorPanel } from './components/AiGeneratorPanel';
@@ -70,6 +72,7 @@ export function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [diffPair, setDiffPair] = useState<[HistoryEntry, HistoryEntry] | null>(null);
+  const [insightsOpen, setInsightsOpen] = useState(false);
 
   // 部分 setter helper
   const update = <K extends keyof SongState>(key: K, value: SongState[K]) => {
@@ -348,6 +351,7 @@ export function App() {
         onClose={() => setHistoryOpen(false)}
         onLoad={handleLoadHistory}
         onCompare={(a, b) => setDiffPair([a, b])}
+        onOpenInsights={() => setInsightsOpen(true)}
         refreshKey={historyRefresh}
       />
 
@@ -356,6 +360,12 @@ export function App() {
         left={diffPair?.[0] ?? null}
         right={diffPair?.[1] ?? null}
         onClose={() => setDiffPair(null)}
+      />
+
+      <InsightsDashboard
+        open={insightsOpen}
+        entries={loadHistory()}
+        onClose={() => setInsightsOpen(false)}
       />
     </div>
   );
