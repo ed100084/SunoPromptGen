@@ -1,4 +1,5 @@
 import { Section as SectionBlock } from './Section';
+import { getActiveVersion } from '../lib/sunoVersions';
 
 interface Props {
   stylePrompt: string;
@@ -12,6 +13,7 @@ interface Props {
 
 /**
  * 右欄輸出區：Style / Lyrics / Full Prompt + 心法提示。
+ * 字數/tag 上限與心法提示由 active Suno 版本提供。
  */
 export function OutputPanel({
   stylePrompt,
@@ -22,9 +24,16 @@ export function OutputPanel({
   copied,
   onCopy,
 }: Props) {
+  const ver = getActiveVersion();
+  const { maxStyleLength, recommendedTagRange, tagWarnThreshold } = ver.constraints;
+  const [tagMin, tagMax] = recommendedTagRange;
+
   return (
     <div className="lg:sticky lg:top-4">
-      <SectionBlock title="📤 Style Prompt" hint="複製到 Suno 的 Style 欄位｜v5.5 上限約 1000 字元">
+      <SectionBlock
+        title="📤 Style Prompt"
+        hint={`複製到 Suno 的 Style 欄位｜${ver.label} 上限約 ${maxStyleLength} 字元`}
+      >
         <textarea
           value={stylePrompt}
           readOnly
@@ -35,13 +44,20 @@ export function OutputPanel({
           <div className="space-x-2">
             <span
               className={
-                styleLen > 1000 ? 'text-rose-600 font-semibold' : 'text-slate-500 dark:text-slate-400'
+                styleLen > maxStyleLength
+                  ? 'text-rose-600 font-semibold'
+                  : 'text-slate-500 dark:text-slate-400'
               }
             >
-              {styleLen} 字元 {styleLen > 1000 && '(超過 1000)'}
+              {styleLen} 字元 {styleLen > maxStyleLength && `(超過 ${maxStyleLength})`}
             </span>
-            <span className={tagCount > 20 ? 'text-amber-600' : 'text-slate-500 dark:text-slate-400'}>
-              · {tagCount} tags {tagCount > 20 && '(建議 8-15)'}
+            <span
+              className={
+                tagCount > tagWarnThreshold ? 'text-amber-600' : 'text-slate-500 dark:text-slate-400'
+              }
+            >
+              · {tagCount} tags{' '}
+              {tagCount > tagWarnThreshold && `(建議 ${tagMin}-${tagMax})`}
             </span>
           </div>
           <button
@@ -95,15 +111,11 @@ export function OutputPanel({
       </SectionBlock>
 
       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-        <div className="font-semibold mb-2">💡 Suno v5.5 Prompt 心法</div>
+        <div className="font-semibold mb-2">💡 {ver.label} Prompt 心法</div>
         <ul className="list-disc list-inside space-y-1">
-          <li>四層架構：Tempo+Key → 樂器 → 人聲 → 製作紋理</li>
-          <li>Negative Prompt 必加：no autotune / no synths 等</li>
-          <li>具體形容詞：fingerpicked guitar 比 guitar 強</li>
-          <li>Style 控制 1000 字內，tag 8-15 個</li>
-          <li>Subgenre &gt; 廣義 Genre</li>
-          <li>啟用 Voice Clone 時略過人聲描述</li>
-          <li>歌詞段落 [tag] 用英文，內容可用中文</li>
+          {ver.promptTips.map((tip) => (
+            <li key={tip}>{tip}</li>
+          ))}
         </ul>
       </div>
     </div>

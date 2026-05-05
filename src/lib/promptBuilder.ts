@@ -1,56 +1,13 @@
-import {
-  GENRES,
-  MOODS,
-  ENERGY,
-  INSTRUMENTS,
-  VOCALS,
-  TEXTURES,
-  NEGATIVES,
-  LANGUAGES,
-  COHESION_KEYWORDS,
-} from '../data';
+import { LANGUAGES } from '../data';
+import { getActiveVersion } from './sunoVersions';
 import type { Section, SongState } from '../types';
 
+/**
+ * 委託給目前生效的 Suno 版本。版本特定的 prompt 結構（如 v5.5 四層架構）
+ * 由 sunoVersions/v5_5.ts 實作。
+ */
 export function buildStylePrompt(s: SongState): string {
-  const isInstrumental = s.language === '純樂器(無歌詞)';
-  const langKw = LANGUAGES[s.language]?.suno || '';
-
-  const layer1: string[] = [];
-  if (s.genre) layer1.push(GENRES[s.genre] || s.genre);
-  if (s.bpm) layer1.push(`${s.bpm} BPM`);
-  if (s.musicKey) layer1.push(`key of ${s.musicKey}`);
-  if (s.energy) layer1.push(ENERGY[s.energy] || s.energy);
-  if (s.moods.length)
-    layer1.push(s.moods.map((m) => MOODS[m]).filter(Boolean).join(', '));
-
-  const layer2 = s.instruments
-    .map((i) => INSTRUMENTS[i])
-    .filter(Boolean)
-    .join(', ');
-
-  let layer3 = '';
-  if (isInstrumental) {
-    layer3 = 'instrumental, no vocals';
-  } else if (!s.voiceCloneActive) {
-    const vocalParts = [langKw, ...s.vocals.map((v) => VOCALS[v]).filter(Boolean)];
-    layer3 = vocalParts.filter(Boolean).join(', ');
-  }
-
-  const layer4 = s.textures
-    .map((t) => TEXTURES[t])
-    .filter(Boolean)
-    .join(', ');
-
-  const negPart = s.negatives
-    .map((n) => NEGATIVES[n])
-    .filter(Boolean)
-    .join(', ');
-
-  const cohesionPart = s.cohesion ? COHESION_KEYWORDS : '';
-
-  return [layer1.join(', '), layer2, layer3, layer4, cohesionPart, s.extra, negPart]
-    .filter(Boolean)
-    .join(', ');
+  return getActiveVersion().buildStylePrompt(s);
 }
 
 export function buildLyricsPrompt(sections: Section[]): string {
