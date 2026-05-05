@@ -14,6 +14,7 @@ import { addEntry } from './lib/history';
 import { useTheme } from './hooks/useTheme';
 import { useApiSettings } from './hooks/useApiSettings';
 import { HistoryDrawer } from './components/HistoryDrawer';
+import { DiffViewer } from './components/DiffViewer';
 import { AppHeader } from './components/AppHeader';
 import { StyleBuilderPanel } from './components/StyleBuilderPanel';
 import { AiGeneratorPanel } from './components/AiGeneratorPanel';
@@ -68,6 +69,7 @@ export function App() {
   const [copied, setCopied] = useState<Record<string, boolean>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [diffPair, setDiffPair] = useState<[HistoryEntry, HistoryEntry] | null>(null);
 
   // 部分 setter helper
   const update = <K extends keyof SongState>(key: K, value: SongState[K]) => {
@@ -343,7 +345,15 @@ export function App() {
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         onLoad={handleLoadHistory}
+        onCompare={(a, b) => setDiffPair([a, b])}
         refreshKey={historyRefresh}
+      />
+
+      <DiffViewer
+        open={diffPair !== null}
+        left={diffPair?.[0] ?? null}
+        right={diffPair?.[1] ?? null}
+        onClose={() => setDiffPair(null)}
       />
     </div>
   );
