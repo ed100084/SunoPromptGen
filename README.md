@@ -101,7 +101,7 @@ npm run lint     # 型別檢查
 
 ```
 src/
-├── components/         # 12+ React 元件
+├── components/         # 16 React 元件
 │   ├── AppHeader / StyleBuilderPanel / AiGeneratorPanel
 │   ├── SectionsEditor / OutputPanel
 │   ├── HistoryDrawer / DiffViewer / RatingEditor
