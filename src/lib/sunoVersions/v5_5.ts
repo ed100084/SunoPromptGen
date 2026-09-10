@@ -241,6 +241,17 @@ function buildStylePrompt(s: SongState): string {
 export const sunoV5_5: SunoVersion = {
   id: 'v5.5',
   label: 'Suno v5.5',
+  ui: {
+    tagline: 'v5.5 四層架構優化｜中文友善｜抗切割感',
+    foundationHint: 'v5.5 第一層：tempo + key + 曲風 + 能量強度 + 語言',
+    instrumentsHint: 'v5.5 對「形容詞+樂器」反應比裸樂器名更精準',
+    vocalsHint: '若使用 Voice Clone，建議略過人聲描述以避免衝突',
+    texturesHint: 'v5.5 對板式殘響、貼耳收音等細節描述反應極佳',
+    negativesTitle: '🚫 Negative Prompts（v5.5 建議 2-3 個）',
+    negativesHint: '明確告訴模型不要什麼，比正向描述更能聚焦結果',
+    cohesionTitle: '✨ 抗切割感',
+    cohesionHint: '自動加入 seamless transitions 等關鍵字',
+  },
 
   GENRES,
   MOODS,

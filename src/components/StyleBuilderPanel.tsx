@@ -22,6 +22,7 @@ import {
   type SuggestableField,
 } from '../lib/tagSuggestions';
 import { loadHistory } from '../lib/history';
+import { getActiveVersion } from '../lib/sunoVersions';
 
 interface Props {
   state: SongState;
@@ -43,6 +44,8 @@ export function StyleBuilderPanel({
   onUpdate,
   suggestionRefreshKey,
 }: Props) {
+  const ver = getActiveVersion();
+
   // 推薦上下文（依當前狀態與歷史紀錄重算）
   const ctx = useMemo(
     () => buildSuggestionContext(SCENARIOS, loadHistory()),
@@ -85,7 +88,7 @@ export function StyleBuilderPanel({
 
       <SectionBlock
         title="🎼 Layer 1：基本骨架"
-        hint="v5.5 第一層：tempo + key + 曲風 + 能量強度 + 語言"
+        hint={ver.ui.foundationHint}
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
           <div>
@@ -157,7 +160,7 @@ export function StyleBuilderPanel({
 
       <SectionBlock
         title="🎸 Layer 2：樂器配置（建議 2-4 項）"
-        hint="v5.5 對「形容詞+樂器」反應比裸樂器名更精準"
+        hint={ver.ui.instrumentsHint}
       >
         <MultiSelectChips
           options={INSTRUMENTS}
@@ -174,7 +177,7 @@ export function StyleBuilderPanel({
 
       <SectionBlock
         title="🎤 Layer 3：人聲方向"
-        hint="若使用 Voice Clone 建議勾選下方略過人聲描述"
+        hint={ver.ui.vocalsHint}
       >
         <label className="flex items-center gap-2 mb-3 cursor-pointer select-none text-sm">
           <input
@@ -217,7 +220,7 @@ export function StyleBuilderPanel({
 
       <SectionBlock
         title="🎚️ Layer 4：製作風格 / 紋理（建議 2-3 項）"
-        hint="v5.5 對細節描述（板式殘響、貼耳收音等）反應極佳"
+        hint={ver.ui.texturesHint}
       >
         <MultiSelectChips
           options={TEXTURES}
@@ -232,10 +235,7 @@ export function StyleBuilderPanel({
         />
       </SectionBlock>
 
-      <SectionBlock
-        title="🚫 Negative Prompts（v5.5 必用！建議 2-3 個）"
-        hint="明確告訴模型不要什麼，比正向描述更能聚焦結果"
-      >
+      <SectionBlock title={ver.ui.negativesTitle} hint={ver.ui.negativesHint}>
         <MultiSelectChips
           options={NEGATIVES}
           selected={state.negatives}
@@ -249,7 +249,7 @@ export function StyleBuilderPanel({
         />
       </SectionBlock>
 
-      <SectionBlock title="✨ 抗切割感" hint="自動加入 seamless transitions 等關鍵字">
+      <SectionBlock title={ver.ui.cohesionTitle} hint={ver.ui.cohesionHint}>
         <label className="flex items-center gap-3 cursor-pointer select-none">
           <input
             type="checkbox"

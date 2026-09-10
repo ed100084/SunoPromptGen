@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sunoV5_5 } from './v5_5';
-import { getActiveVersion, SUNO_VERSIONS } from './index';
+import { SUNO_VERSIONS } from './index';
 import type { SongState } from '../../types';
 
 const baseState: SongState = {
@@ -94,9 +94,5 @@ describe('sunoVersions registry', () => {
   it('SUNO_VERSIONS 含 v5.5', () => {
     expect(SUNO_VERSIONS['v5.5']).toBeDefined();
     expect(SUNO_VERSIONS['v5.5'].id).toBe('v5.5');
-  });
-
-  it('getActiveVersion 預設回 v5.5', () => {
-    expect(getActiveVersion().id).toBe('v5.5');
   });
 });

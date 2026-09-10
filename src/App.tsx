@@ -22,6 +22,7 @@ import { StyleBuilderPanel } from './components/StyleBuilderPanel';
 import { AiGeneratorPanel } from './components/AiGeneratorPanel';
 import { SectionsEditor } from './components/SectionsEditor';
 import { OutputPanel } from './components/OutputPanel';
+import { getActiveVersion } from './lib/sunoVersions';
 
 const DEFAULT_STATE: SongState = {
   songTitle: '',
@@ -46,6 +47,7 @@ const DEFAULT_STATE: SongState = {
 };
 
 export function App() {
+  const ver = getActiveVersion();
   const [theme, toggleTheme] = useTheme();
   const [state, setState] = useState<SongState>(DEFAULT_STATE);
   const [scenario, setScenario] = useState('');
@@ -145,7 +147,10 @@ export function App() {
 
   // 字數警示
   const styleLen = stylePrompt.length;
-  const tagCount = stylePrompt.split(',').filter((x) => x.trim()).length;
+  const tagCount = stylePrompt
+    .split(/[,.;]/)
+    .map((x) => x.replace(/^[^:]+:\s*/, '').trim())
+    .filter(Boolean).length;
 
   const totalLyricsChars = useMemo(
     () => state.sections.reduce((sum, s) => sum + s.lyrics.length, 0),
@@ -342,7 +347,7 @@ export function App() {
         </div>
 
         <footer className="mt-8 text-center text-xs text-slate-400 dark:text-slate-500">
-          Suno Prompt Generator · v5.5 Optimized · {new Date().getFullYear()}
+          Suno Prompt Generator · {ver.label} · {new Date().getFullYear()}
         </footer>
       </div>
 

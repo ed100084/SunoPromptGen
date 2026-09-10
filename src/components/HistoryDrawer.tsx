@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { HistoryEntry, SongResult } from '../types';
 import {
   clearAll,
@@ -34,10 +34,10 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, onOpenInsights
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<RatingFilter>('all');
 
-  // 重新讀取（外部觸發 refresh 時）
-  if (refreshKey !== undefined) {
-    // noop - just to depend on refreshKey
-  }
+  // 抽屜開啟或外部新增紀錄時重新讀取。
+  useEffect(() => {
+    if (open) setEntries(loadHistory());
+  }, [open, refreshKey]);
 
   const stats = useMemo(() => computeRatingStats(entries), [entries]);
 
@@ -134,11 +134,6 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, onOpenInsights
     const b = entries.find((e) => e.id === selectedIds[1]);
     if (a && b) onCompare(a, b);
   };
-
-  // refresh from props
-  if (open && entries.length === 0 && loadHistory().length > 0) {
-    setEntries(loadHistory());
-  }
 
   return (
     <>
@@ -341,8 +336,11 @@ export function HistoryDrawer({ open, onClose, onLoad, onCompare, onOpenInsights
                       </div>
                     )}
 
-                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                      {new Date(e.savedAt).toLocaleString('zh-TW')}
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-2">
+                      <span>{new Date(e.savedAt).toLocaleString('zh-TW')}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-medium">
+                        {e.sunoVersion || 'legacy'}
+                      </span>
                     </div>
                     <div className="text-xs text-slate-600 dark:text-slate-300 mb-2 line-clamp-2 font-mono">
                       {e.stylePrompt.slice(0, 120)}...

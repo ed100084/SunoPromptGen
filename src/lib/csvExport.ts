@@ -19,6 +19,7 @@ const HEADERS = [
   'id',
   'title',
   'savedAt',
+  'sunoVersion',
   'rating',
   'audioUrl',
   'notes',
@@ -45,11 +46,15 @@ export function exportHistoryAsCsv(entries: HistoryEntry[]): string {
   for (const e of entries) {
     const s = e.state;
     const styleLen = e.stylePrompt.length;
-    const tagCount = e.stylePrompt.split(',').filter((x) => x.trim()).length;
+    const tagCount = e.stylePrompt
+      .split(/[,.;]/)
+      .map((x) => x.replace(/^[^:]+:\s*/, '').trim())
+      .filter(Boolean).length;
     const row = [
       e.id,
       e.title,
       new Date(e.savedAt).toISOString(),
+      e.sunoVersion ?? 'legacy',
       e.result?.rating ?? '',
       e.result?.audioUrl ?? '',
       e.result?.notes ?? '',

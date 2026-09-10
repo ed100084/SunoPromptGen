@@ -38,7 +38,7 @@ describe('exportHistoryAsCsv', () => {
   it('回傳含 header 與資料列的 CSV', () => {
     const csv = exportHistoryAsCsv([mkEntry({})]);
     const lines = csv.split('\n');
-    expect(lines[0]).toContain('id,title,savedAt');
+    expect(lines[0]).toContain('id,title,savedAt,sunoVersion');
     expect(lines).toHaveLength(2);
   });
 
@@ -48,6 +48,11 @@ describe('exportHistoryAsCsv', () => {
     ]);
     expect(csv).toContain('"a, b ""c"""');
     expect(csv).toContain('"has, commas"');
+  });
+
+  it('Suno 版本出現在輸出中', () => {
+    const csv = exportHistoryAsCsv([mkEntry({ sunoVersion: 'v6' })]);
+    expect(csv).toContain(',v6,');
   });
 
   it('rating 與 audioUrl 出現在輸出中', () => {

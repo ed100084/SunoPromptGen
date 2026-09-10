@@ -24,7 +24,7 @@ export default defineConfig({
       manifest: {
         name: 'Suno Prompt Generator',
         short_name: 'SunoPrompt',
-        description: 'Suno v5.5 prompt generator with multi-language support',
+        description: 'Suno v6 prompt generator with natural-language music intent',
         theme_color: '#4f46e5',
         background_color: '#0f172a',
         display: 'standalone',

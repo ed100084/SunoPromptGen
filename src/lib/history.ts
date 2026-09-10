@@ -1,4 +1,5 @@
 import type { HistoryEntry, SongResult, SongState } from '../types';
+import { getActiveVersion } from './sunoVersions';
 import { STORAGE_KEYS, getJSON, setJSON, removeItem } from './storage';
 
 const MAX_ENTRIES = 50;
@@ -18,7 +19,8 @@ export function addEntry(state: SongState, stylePrompt: string, lyricsPrompt: st
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     savedAt: Date.now(),
     title: state.songTitle || `未命名 (${new Date().toLocaleString('zh-TW')})`,
-    state,
+    sunoVersion: getActiveVersion().id,
+    state: structuredClone(state),
     stylePrompt,
     lyricsPrompt,
   };

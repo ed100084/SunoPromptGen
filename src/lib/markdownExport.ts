@@ -33,6 +33,7 @@ export function exportEntryAsMarkdown(e: HistoryEntry): string {
   lines.push('| 欄位 | 值 |');
   lines.push('| --- | --- |');
   lines.push(`| 建立時間 | ${date} |`);
+  lines.push(`| Suno 版本 | ${e.sunoVersion || '舊版紀錄'} |`);
   if (e.result?.rating) lines.push(`| 評分 | ${stars} (${e.result.rating}/5) |`);
   if (e.result?.audioUrl) lines.push(`| 音檔連結 | [${e.result.audioUrl}](${e.result.audioUrl}) |`);
   lines.push(`| 語言 | ${s.language} |`);

@@ -1,6 +1,6 @@
 # Suno Prompt Generator
 
-中文友善的 Suno AI prompt 產生器 — **22 個情境範本、4 層架構視覺化、歷史比對與評分**。
+中文友善的 Suno AI prompt 產生器 — **支援 Suno v6、22 個情境範本、意圖結構視覺化、歷史比對與評分**。
 PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 
 🌐 線上版：<https://ed100084.github.io/SunoPromptGen/>
@@ -10,12 +10,13 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 ## Features
 
 ### 🎼 Prompt 生成
-- **Suno v5.5 四層架構** — Tempo+Key → 樂器 → 人聲方向 → 製作紋理
-- **可插拔版本層** — `lib/sunoVersions/` 抽象介面，未來 v6 / v7 只需新增檔案，現有程式碼零修改
-- **Negative Prompts** — v5.5 必用的反向約束（no autotune / no synths 等）
-- **抗切割感** — 一鍵加入 seamless transitions 等連貫性關鍵字
+- **Suno v6 自然語言意圖** — 核心方向 → 演奏與編制 → 人聲意圖 → 製作方向 → 整體 Feel
+- **v6 / v6-wild / v6-mini 對應思路** — 精準成品、探索性變化與快速草稿可共用同一套意圖描述
+- **可插拔版本層** — `lib/sunoVersions/` 同時保留 v5.5 與 v6，active version 目前為 v6
+- **具體排除項目** — 可加入 no autotune / no synths 等真正不希望出現的聲音
+- **整體連貫性** — 一鍵加入自然段落轉場、重複動機與一致聲音識別
 - **Voice Clone 模式** — 啟用後自動略過人聲描述
-- **即時字元 / tag 數警示** — 1000 字以內、建議 8-15 tags
+- **即時字元 / 意圖數警示** — 目前採 1000 字安全上限、建議 8-18 個具體意圖（官方未公布新的硬上限）
 - **22 個情境範本** — 華語抒情、流行燃曲、搖滾爆發、Lo-fi 讀書、古風中國風、Indie 民謠、電影配樂、City Pop、EDM 派對、氛圍環境、K-Pop 偶像舞曲、R&B 慢板、華語嘻哈、Synthwave 80s、House 律動、Bossa Nova 咖啡、Pop Punk 熱血、Funk 派對、Dream Pop 迷幻、Acoustic 純粹、粵語金曲、童趣兒歌
 - **15 種段落結構模板** — 標準流行、抒情骨架、電子流行 Drop、搖滾骨架、簡短版、極簡 V-C、純樂器 Loop、Hip-Hop 結構、K-Pop 舞曲（含 Dance Break）、EDM 完整版（Buildup-Drop）、AABA 32-bar 爵士標準、古風敘事長篇、Funk Vamp、童謠循環、Folk 敘事
 
@@ -33,8 +34,8 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 - **押韻分析** — 基於 pinyin-pro，14 韻系映射，即時上色
 - **字數統計** — 每行字數、標準差、不平均提示、重複行偵測
 
-### 🔍 結構視圖（v5.5 教學）
-Style Prompt 區塊提供「文字 / 結構」雙 tab，把 prompt 拆成各層 tag chips，幫助理解四層架構。
+### 🔍 結構視圖（v6 意圖教學）
+Style Prompt 區塊提供「文字 / 結構」雙 tab，把 prompt 拆成核心方向、演奏、人聲、製作、整體 Feel、創意參考與排除項目，方便檢查複雜音樂視野。
 
 ### 📊 歷史紀錄 + 結果回饋
 - **本機歷史** — localStorage 最多 50 筆，可匯出/匯入 JSON
@@ -44,7 +45,7 @@ Style Prompt 區塊提供「文字 / 結構」雙 tab，把 prompt 拆成各層 
 - **評分篩選器** — 全部 / 5★ / 4★+ / 已評 / 未評
 - **多種匯出**：
   - 📄 **Markdown** — 單筆作品完整文件（標題/評分/metadata/Style/Lyrics），可貼到 Notion / 部落格
-  - 📊 **CSV** — 21 欄位 dataset，可丟 Excel/Sheets 分析自己的成功 patterns
+  - 📊 **CSV** — 22 欄位 dataset（含 Suno 版本），可丟 Excel/Sheets 分析自己的成功 patterns
   - 📦 **JSON** — 完整備份/還原
 
 ### 📈 成功 Patterns 儀表板
@@ -80,7 +81,7 @@ npm run lint     # 型別檢查
 
 1. 從 **🎯 一鍵情境範本** 選一個起點（22 個，涵蓋多種曲風 / 語言）
 2. 微調 **Layer 1-4** 各層級參數（基本骨架 / 樂器 / 人聲 / 紋理）
-3. 加上 **Negative Prompts**（v5.5 強烈推薦）
+3. 視需要加入具體的 **排除項目**，避免與主要創作意圖互相競爭
 4. 用 **AI 歌詞生成** 三模式之一補上歌詞
 5. 複製 **Style / Lyrics** 到 Suno 對應欄位
 6. 生成完音樂後回到工具 **💾 儲存歷史 + ⭐ 評分**，累積成功配方
@@ -89,6 +90,7 @@ npm run lint     # 型別檢查
 
 ## Tech Stack
 
+- **Suno v6 active version** — 依官方 v6 對 vocals / instrumentation / structure / mood / references / overall feel 的強化設計
 - **React 18** + **TypeScript 5.7**（strict mode）
 - **Vite 6** — Build with manualChunks（react-vendor / pinyin / app 三 chunk 拆分）
 - **Tailwind CSS 3.4** — 含 dark mode
@@ -110,7 +112,7 @@ src/
 │   └── LyricsAnalyzer / MultiSelectChips / SingleSelect / ...
 ├── hooks/              # useTheme / useApiSettings
 ├── lib/
-│   ├── sunoVersions/   # 版本抽象層（v5_5.ts 是真理之源）
+│   ├── sunoVersions/   # 版本抽象層（v5_5.ts + v6.ts，active=v6）
 │   ├── promptBuilder.ts    # 委託給 active version
 │   ├── llm.ts              # 多家 LLM provider 統一介面
 │   ├── rhyme.ts            # 中文押韻 14 韻系
@@ -141,23 +143,24 @@ GitHub Actions 自動部署到 Pages：見 `.github/workflows/deploy.yml`，每�
 
 ---
 
-## 擴充：新增 Suno 版本（v6+）
+## 擴充：新增 Suno 版本（v7+）
 
-未來 Suno 出新版只需 3 步驟：
+目前 `v5.5` 與 `v6` 都保留在 registry。未來 Suno 出新版的核心步驟：
 
-1. 建立 `src/lib/sunoVersions/v6.ts` 實作 `SunoVersion` 介面
-2. 在 `index.ts` 的 `SUNO_VERSIONS` 註冊
-3. 改 `ACTIVE_VERSION_ID`（或加 UI 切換）
+1. 建立 `src/lib/sunoVersions/v7.ts` 實作 `SunoVersion` 介面
+2. 在 `index.ts` 的 `SUNO_VERSIONS` 註冊並修改 `ACTIVE_VERSION_ID`
+3. 新增版本 builder 測試，確認所有情境範本的 vocab key 相容
+4. 同步更新 README、HTML title 與 PWA description 等發布 metadata
 
-其餘程式碼一行都不用改 — vocab / 限制 / builder / 心法都會自動切換。
+vocab、限制、builder、結構視圖、UI 教學文案與 Prompt 心法會透過版本物件切換。
 
 ---
 
 ## Reference
 
-- [Suno v5.5 Prompt Engineering Guide](https://suno.bi/blog/suno-v5-5-prompt-engineering-advanced-techniques-2026-en)
-- [Song AI Farm — v5.5 Prompts](https://www.songaifarm.com/blog/suno-prompts-v5-5)
-- [Suno v5 Best Practices](https://hookgenius.app/learn/suno-v5-complete-guide/)
+- [Suno 官方：Introducing v6](https://suno.com/blog/introducing-v6)
+- [Suno 官方 Release Notes](https://suno.com/release-notes)
+- [Suno 官方：v5.5](https://suno.com/blog/v5-5)（legacy 版本參考）
 
 ---
 

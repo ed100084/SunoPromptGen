@@ -12,18 +12,20 @@
 
 import type { SunoVersion } from './types';
 import { sunoV5_5 } from './v5_5';
+import { sunoV6 } from './v6';
 
 /** 全部已支援版本（依 id 索引）。 */
 export const SUNO_VERSIONS: Record<string, SunoVersion> = {
   [sunoV5_5.id]: sunoV5_5,
+  [sunoV6.id]: sunoV6,
 };
 
 /** 目前生效的版本 id。將來可改為從 localStorage / UI 設定讀取。 */
-export const ACTIVE_VERSION_ID = 'v5.5';
+export const ACTIVE_VERSION_ID = 'v6';
 
 /** 取得目前生效的 Suno 版本。 */
 export function getActiveVersion(): SunoVersion {
-  return SUNO_VERSIONS[ACTIVE_VERSION_ID] ?? sunoV5_5;
+  return SUNO_VERSIONS[ACTIVE_VERSION_ID] ?? sunoV6;
 }
 
 export type { SunoVersion } from './types';

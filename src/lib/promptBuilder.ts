@@ -3,8 +3,8 @@ import { getActiveVersion } from './sunoVersions';
 import type { Section, SongState } from '../types';
 
 /**
- * 委託給目前生效的 Suno 版本。版本特定的 prompt 結構（如 v5.5 四層架構）
- * 由 sunoVersions/v5_5.ts 實作。
+ * 委託給目前生效的 Suno 版本；版本特定的詞彙、結構與組裝策略
+ * 由 sunoVersions/ 下的對應模組實作。
  */
 export function buildStylePrompt(s: SongState): string {
   return getActiveVersion().buildStylePrompt(s);

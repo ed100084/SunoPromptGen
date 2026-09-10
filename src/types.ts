@@ -75,6 +75,8 @@ export interface HistoryEntry {
   id: string;
   savedAt: number;
   title: string;
+  /** 建立這筆 Prompt 時使用的 Suno 模型版本；舊資料可能沒有此欄位。 */
+  sunoVersion?: string;
   state: SongState;
   stylePrompt: string;
   lyricsPrompt: string;

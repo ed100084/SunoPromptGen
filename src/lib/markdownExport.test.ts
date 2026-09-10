@@ -39,7 +39,13 @@ describe('exportEntryAsMarkdown', () => {
     const md = exportEntryAsMarkdown(mkEntry({}));
     expect(md).toContain('# 我的歌');
     expect(md).toContain('| 欄位 | 值 |');
+    expect(md).toContain('| Suno 版本 | 舊版紀錄 |');
     expect(md).toContain('| 語言 | 華語(繁體) |');
+  });
+
+  it('顯示建立 Prompt 時使用的 Suno 版本', () => {
+    const md = exportEntryAsMarkdown(mkEntry({ sunoVersion: 'v6' }));
+    expect(md).toContain('| Suno 版本 | v6 |');
   });
 
   it('陣列欄位以逗號分隔', () => {

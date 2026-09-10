@@ -26,11 +26,26 @@ export interface SunoVersionConstraints {
   tagWarnThreshold: number;
 }
 
+export interface SunoVersionUiCopy {
+  /** 頁首副標題。 */
+  tagline: string;
+  foundationHint: string;
+  instrumentsHint: string;
+  vocalsHint: string;
+  texturesHint: string;
+  negativesTitle: string;
+  negativesHint: string;
+  cohesionTitle: string;
+  cohesionHint: string;
+}
+
 export interface SunoVersion {
   /** 版本識別碼，例如 'v5.5'、'v6'。 */
   id: string;
   /** UI 顯示名稱。 */
   label: string;
+  /** 版本專屬教學文案。 */
+  ui: SunoVersionUiCopy;
 
   // ─── 詞彙映射（中文鍵 → Suno 英文 tag） ───
   GENRES: Record<string, string>;
@@ -42,7 +57,7 @@ export interface SunoVersion {
   NEGATIVES: Record<string, string>;
   LANGUAGES: Record<string, LanguageInfo>;
 
-  /** 連貫性關鍵字（v5.5 抗切割感技巧；不同版本可能不同 / 不需要）。 */
+  /** 連貫性關鍵字（不同版本可採 tag 或自然語言描述）。 */
   COHESION_KEYWORDS: string;
 
   /** UI 約束（字數、tag 數）。 */
@@ -50,8 +65,7 @@ export interface SunoVersion {
 
   /**
    * 把 SongState 組成 style prompt（純函數）。
-   * v5.5 為四層架構（tempo+key → 樂器 → 人聲 → 紋理），
-   * 未來版本可能改為其他結構。
+   * 各版本可使用分層 tags 或自然語言意圖等不同結構。
    */
   buildStylePrompt: (state: SongState) => string;
 
