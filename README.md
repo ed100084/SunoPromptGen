@@ -15,6 +15,8 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 - **Explore** — 以 v6-wild 描述探索軸線，保留核心並打開大膽變化
 - **Edit Section / Lyrics** — 明確指定 Scope、Preserve 與 Change，避免重建整首作品
 - **Mashup / Sample** — 為每個來源指定角色與時間範圍，並提示素材權利確認
+- **快速隨機創作** — 一鍵產生協調完整的創作方向，提供穩定、平衡、大膽三種隨機程度，並保留既有歌名與歌詞
+- **精簡模式** — 預設只顯示作品名稱、創作意圖、曲風、情緒與歌詞；模型、編曲、段落、Preset 與 AI 工具收進進階設定
 - **v6 Preset 系統** — 7 組完整創作方向，可一次套用 brief、段落、演唱方向、能量弧線與模型／工作流建議
 - **Structured Section Editor** — canonical schema 完整保存每段 ID、名稱、角色、能量、編制、歌詞與鎖定狀態，並支援新增、刪除及排序
 - **Generation Runs** — 每個 Revision 可保存、編輯與刪除多次生成結果，包含實際 submitted prompt、音檔 URL、狀態、備註、獨立評分、最佳結果與 A/B 比較
