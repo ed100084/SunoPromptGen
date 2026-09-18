@@ -17,7 +17,7 @@ test('edits structured sections and saves a project', async ({ page }) => {
   await expect.poll(() => page.getByRole('textbox').evaluateAll((elements) =>
     elements.filter((element) => (element as HTMLInputElement).value === 'Verse').length)).toBeGreaterThan(0);
   await page.getByRole('button', { name: '儲存版本' }).click();
-  await expect(page.getByText(/已建立 Project|Revision 已儲存/)).toBeVisible();
+  await expect(page.getByText(/已建立新 Project|已建立新 Revision/)).toBeVisible();
   await expect(page.getByText(/1 revisions/)).toBeVisible();
 });
 
