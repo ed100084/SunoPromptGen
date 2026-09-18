@@ -95,7 +95,7 @@ describe('projectStore localStorage fallback', () => {
     await expect(repository.import(JSON.stringify([
       createPersistedProjectEnvelope(incoming, 30),
       { kind: 'suno-prompt-gen/project', schemaVersion: 1, savedAt: 31, project: {} },
-    ]))).rejects.toThrow('project: Invalid canonical v7 SongProject');
+    ]))).rejects.toThrow('project: Invalid canonical v8 SongProject');
 
     expect(await repository.list()).toEqual([existing]);
   });
@@ -110,7 +110,7 @@ describe('projectStore localStorage fallback', () => {
     await expect(repository.import(JSON.stringify({ ...envelope, kind: 'other' }))).rejects
       .toThrow('Unsupported persisted project kind');
     await expect(repository.import(JSON.stringify(brokenActive))).rejects
-      .toThrow('project: Invalid canonical v7 SongProject');
+      .toThrow('project: Invalid canonical v8 SongProject');
     expect(await repository.import('[]')).toEqual([]);
     expect(await repository.list()).toEqual([]);
   });

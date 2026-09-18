@@ -23,12 +23,20 @@ describe('GenerationRun canonical domain', () => {
       createdAt: 10,
       model: 'v6',
       workflow: 'create',
+      compilerVersion: null,
+      revisionHash: null,
+      externalSongId: null,
+      externalJobId: null,
+      seed: null,
+      actualModelVersion: null,
+      tags: [],
       submittedPrompt: '',
       audioUrl: '',
       rating: null,
       notes: '',
       status: 'pending',
       isBest: false,
+      bestReason: null,
     });
     expect(isGenerationRun(run)).toBe(true);
     expect(isGenerationRun({ ...run, status: 'unknown' })).toBe(false);
@@ -89,8 +97,11 @@ describe('legacy evaluation persistence migration', () => {
   it('在相同 schemaVersion 讀取舊 envelope 時轉成一筆 generation run', () => {
     const project = createDefaultSongProject({ id: 'p', revisionId: 'r', now: 10 });
     const envelope = createPersistedProjectEnvelope(project, 30) as unknown as {
-      project: { revisions: Array<Record<string, unknown>> };
+      schemaVersion: number;
+      project: { domainVersion: number; revisions: Array<Record<string, unknown>> };
     };
+    envelope.schemaVersion = 2;
+    envelope.project.domainVersion = 7;
     const legacyRevision = envelope.project.revisions[0];
     delete legacyRevision.generationRuns;
     legacyRevision.evaluation = {
@@ -109,20 +120,34 @@ describe('legacy evaluation persistence migration', () => {
       createdAt: 20,
       model: 'v6',
       workflow: 'create',
+      compilerVersion: null,
+      revisionHash: null,
+      externalSongId: null,
+      externalJobId: null,
+      seed: null,
+      actualModelVersion: null,
+      tags: [],
       submittedPrompt: '',
       audioUrl: 'https://example.com/legacy.mp3',
       rating: 5,
       notes: 'legacy note',
       status: 'succeeded',
       isBest: false,
+      bestReason: null,
     }]);
+    expect('evaluation' in decoded.value.project.revisions[0]).toBe(false);
   });
 
   it('補齊舊 generation run 新欄位且不突變輸入', () => {
     const envelope = createPersistedProjectEnvelope(
       createDefaultSongProject({ id: 'p', revisionId: 'r', now: 10 }),
       30,
-    ) as unknown as { project: { revisions: Array<{ generationRuns: Array<Record<string, unknown>> }> } };
+    ) as unknown as {
+      schemaVersion: number;
+      project: { domainVersion: number; revisions: Array<{ generationRuns: Array<Record<string, unknown>> }> };
+    };
+    envelope.schemaVersion = 2;
+    envelope.project.domainVersion = 7;
     const legacyRun = createDefaultGenerationRun({ id: 'old-run', createdAt: 11 });
     delete (legacyRun as unknown as Record<string, unknown>).submittedPrompt;
     delete (legacyRun as unknown as Record<string, unknown>).isBest;
@@ -143,13 +168,59 @@ describe('legacy evaluation persistence migration', () => {
       30,
     );
     const legacy = structuredClone(envelope) as unknown as {
-      project: { revisions: Array<Record<string, unknown>> };
+      schemaVersion: number;
+      project: { domainVersion: number; revisions: Array<Record<string, unknown>> };
     };
+    legacy.schemaVersion = 1;
+    legacy.project.domainVersion = 6;
     delete legacy.project.revisions[0].generationRuns;
+    legacy.project.revisions[0].evaluation = {
+      rating: null, audioUrl: '', notes: '', evaluatedAt: null,
+    };
 
     const decoded = decodePersistedProjectEnvelope(legacy);
 
     expect(decoded.ok && decoded.value.project.revisions[0].generationRuns).toEqual([]);
+    expect(decoded.ok && 'evaluation' in decoded.value.project.revisions[0]).toBe(false);
     expect('generationRuns' in legacy.project.revisions[0]).toBe(false);
+  });
+
+  it('現行 schema 不接受 legacy evaluation，僅 legacy schema migration 邊界可轉換', () => {
+    const current = createPersistedProjectEnvelope(
+      createDefaultSongProject({ id: 'p', revisionId: 'r', now: 10 }),
+      30,
+    ) as unknown as { project: { revisions: Array<Record<string, unknown>> } };
+    delete current.project.revisions[0].generationRuns;
+    current.project.revisions[0].evaluation = {
+      rating: 4, audioUrl: '', notes: 'legacy', evaluatedAt: 20,
+    };
+
+    expect(decodePersistedProjectEnvelope(current).ok).toBe(false);
+  });
+
+  it('重複解碼已遷移 envelope 不會新增第二筆 legacy run', () => {
+    const legacy = createPersistedProjectEnvelope(
+      createDefaultSongProject({ id: 'p', revisionId: 'r', now: 10 }),
+      30,
+    ) as unknown as {
+      schemaVersion: number;
+      project: { domainVersion: number; revisions: Array<Record<string, unknown>> };
+    };
+    legacy.schemaVersion = 2;
+    legacy.project.domainVersion = 7;
+    delete legacy.project.revisions[0].generationRuns;
+    legacy.project.revisions[0].evaluation = {
+      rating: 4, audioUrl: '', notes: 'once', evaluatedAt: 20,
+    };
+
+    const first = decodePersistedProjectEnvelope(legacy);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const second = decodePersistedProjectEnvelope(first.value);
+
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value.project.revisions[0].generationRuns).toHaveLength(1);
+    expect(second.value.project.revisions[0].generationRuns[0].id).toBe('r-legacy-evaluation');
   });
 });

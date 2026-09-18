@@ -11,6 +11,8 @@ export type Rating = 1 | 2 | 3 | 4 | 5;
 export interface InsightsV2Options {
   /** Include canonical projects produced by the legacy migration adapter. Defaults to false. */
   includeMigrated?: boolean;
+  /** Run groups below this size are marked low-sample. Defaults to 5. */
+  lowSampleThreshold?: number;
 }
 
 export interface CountShare<T extends string | number> {
@@ -29,6 +31,18 @@ export interface RevisionDepthBucket extends CountShare<number> {
   averageRating: number | null;
 }
 
+export interface RunGroupInsight {
+  key: string;
+  count: number;
+  ratedCount: number;
+  succeededCount: number;
+  successRate: number | null;
+  averageRating: number | null;
+  bestCount: number;
+  bestRate: number | null;
+  lowSample: boolean;
+}
+
 export interface InsightsV2Report {
   /** Explicit scope metadata lets the UI explain which records were excluded. */
   scope: {
@@ -41,6 +55,22 @@ export interface InsightsV2Report {
   };
   models: PerformanceBreakdown<GenerationModel>[];
   workflows: PerformanceBreakdown<GenerationWorkflow>[];
+  /** Correlational product analytics only; these summaries do not establish causality. */
+  runAnalytics: {
+    disclaimer: string;
+    lowSampleThreshold: number;
+    totalRuns: number;
+    groups: {
+      models: RunGroupInsight[];
+      workflows: RunGroupInsight[];
+      presets: RunGroupInsight[];
+      tags: RunGroupInsight[];
+    };
+    bestVsOthers: {
+      best: RunGroupInsight;
+      others: RunGroupInsight;
+    };
+  };
   ratings: {
     ratedRevisionCount: number;
     unratedRevisionCount: number;
@@ -68,7 +98,7 @@ function revisionRating(revision: Revision): Rating | null {
     const rating = runs[index].rating;
     if (rating !== null) return rating;
   }
-  return revision.evaluation.rating;
+  return null;
 }
 
 const MODELS: readonly GenerationModel[] = ['v6', 'v6-wild', 'v6-mini'];
@@ -145,6 +175,41 @@ function resolveRevisionDepths(project: SongProject): {
   };
 }
 
+type RunObservation = Revision['generationRuns'][number];
+
+function summarizeRunGroup(key: string, runs: readonly RunObservation[], lowSampleThreshold: number): RunGroupInsight {
+  const ratings = runs.map((run) => run.rating).filter((rating): rating is Rating => rating !== null);
+  const succeededCount = runs.filter((run) => run.status === 'succeeded').length;
+  const bestCount = runs.filter((run) => run.isBest).length;
+  return {
+    key,
+    count: runs.length,
+    ratedCount: ratings.length,
+    succeededCount,
+    successRate: runs.length === 0 ? null : succeededCount / runs.length,
+    averageRating: average(ratings),
+    bestCount,
+    bestRate: runs.length === 0 ? null : bestCount / runs.length,
+    lowSample: runs.length < lowSampleThreshold,
+  };
+}
+
+function groupRuns(
+  runs: readonly RunObservation[],
+  keysForRun: (run: RunObservation) => readonly string[],
+  lowSampleThreshold: number,
+): RunGroupInsight[] {
+  const groups = new Map<string, RunObservation[]>();
+  for (const run of runs) {
+    for (const key of new Set(keysForRun(run).filter(Boolean))) {
+      groups.set(key, [...(groups.get(key) ?? []), run]);
+    }
+  }
+  return [...groups.entries()]
+    .map(([key, matching]) => summarizeRunGroup(key, matching, lowSampleThreshold))
+    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key));
+}
+
 function buildPerformanceBreakdown<T extends string>(
   keys: readonly T[],
   observations: readonly RevisionObservation[],
@@ -200,6 +265,12 @@ export function analyzeCanonicalInsights(
     .filter((rating): rating is Rating => rating !== null);
   const depthValues = observations.map(({ depth }) => depth);
   const depthKeys = [...new Set(depthValues)].sort((a, b) => a - b);
+  const runs = observations.flatMap(({ revision }) => revision.generationRuns);
+  const lowSampleThreshold = Number.isInteger(options.lowSampleThreshold) && (options.lowSampleThreshold ?? 0) > 0
+    ? options.lowSampleThreshold as number
+    : 5;
+  const bestRuns = runs.filter((run) => run.isBest);
+  const otherRuns = runs.filter((run) => !run.isBest);
 
   return {
     scope: {
@@ -216,6 +287,21 @@ export function analyzeCanonicalInsights(
       observations,
       (revision) => revision.generationTarget.workflow,
     ),
+    runAnalytics: {
+      disclaimer: '相關性與產品分析摘要，不代表因果關係。',
+      lowSampleThreshold,
+      totalRuns: runs.length,
+      groups: {
+        models: groupRuns(runs, (run) => [run.actualModelVersion ?? run.model], lowSampleThreshold),
+        workflows: groupRuns(runs, (run) => [run.workflow], lowSampleThreshold),
+        presets: groupRuns(runs, (run) => run.tags.filter((tag) => tag.startsWith('preset:')).map((tag) => tag.slice(7)), lowSampleThreshold),
+        tags: groupRuns(runs, (run) => run.tags, lowSampleThreshold),
+      },
+      bestVsOthers: {
+        best: summarizeRunGroup('best', bestRuns, lowSampleThreshold),
+        others: summarizeRunGroup('others', otherRuns, lowSampleThreshold),
+      },
+    },
     ratings: {
       ratedRevisionCount: ratings.length,
       unratedRevisionCount: observations.length - ratings.length,

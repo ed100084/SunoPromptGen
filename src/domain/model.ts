@@ -1,9 +1,9 @@
 import type { DecodeResult } from './runtime';
 import { failure, isFiniteNumber, isRecord, isStringArray, success } from './runtime';
 
-export const CANONICAL_DOMAIN_VERSION = 7 as const;
-export const PERSISTED_PROJECT_SCHEMA_VERSION = 2 as const;
-export const LEGACY_PERSISTED_PROJECT_SCHEMA_VERSION = 1 as const;
+export const CANONICAL_DOMAIN_VERSION = 8 as const;
+export const PERSISTED_PROJECT_SCHEMA_VERSION = 3 as const;
+export const LEGACY_PERSISTED_PROJECT_SCHEMA_VERSIONS = [1, 2] as const;
 
 export type CanonicalDomainVersion = typeof CANONICAL_DOMAIN_VERSION;
 export type PersistedProjectSchemaVersion = typeof PERSISTED_PROJECT_SCHEMA_VERSION;
@@ -108,6 +108,13 @@ export interface GenerationRun {
   createdAt: number;
   model: GenerationModel;
   workflow: GenerationWorkflow;
+  compilerVersion: string | null;
+  revisionHash: string | null;
+  externalSongId: string | null;
+  externalJobId: string | null;
+  seed: number | null;
+  actualModelVersion: string | null;
+  tags: string[];
   /** Exact prompt text submitted to the generation provider. */
   submittedPrompt: string;
   audioUrl: string;
@@ -116,14 +123,7 @@ export interface GenerationRun {
   status: GenerationRunStatus;
   /** At most one run per revision may be marked as the best result. */
   isBest: boolean;
-}
-
-/** Persistence-v1 compatibility shape, migrated into a GenerationRun when non-empty. */
-export interface Evaluation {
-  rating: 1 | 2 | 3 | 4 | 5 | null;
-  audioUrl: string;
-  notes: string;
-  evaluatedAt: number | null;
+  bestReason: string | null;
 }
 
 export interface Revision {
@@ -139,8 +139,6 @@ export interface Revision {
   renderedPrompt: RenderedPrompt | null;
   /** Concrete outputs generated from this revision. */
   generationRuns: GenerationRun[];
-  /** @deprecated Transitional single-result projection; use generationRuns. */
-  evaluation: Evaluation;
 }
 
 export interface SongProject {
@@ -207,12 +205,20 @@ export const DEFAULT_GENERATION_TARGET: Readonly<GenerationTarget> = Object.free
 export const DEFAULT_GENERATION_RUN: Readonly<Omit<GenerationRun, 'id' | 'createdAt'>> = Object.freeze({
   model: 'v6',
   workflow: 'create',
+  compilerVersion: null,
+  revisionHash: null,
+  externalSongId: null,
+  externalJobId: null,
+  seed: null,
+  actualModelVersion: null,
+  tags: [],
   submittedPrompt: '',
   audioUrl: '',
   rating: null,
   notes: '',
   status: 'pending',
   isBest: false,
+  bestReason: null,
 });
 
 function cloneDefaults<T>(value: T): T {
@@ -309,7 +315,6 @@ export function createDefaultSongProject(options: NewSongProjectOptions = {}): S
     generationTarget,
     renderedPrompt: null,
     generationRuns: [],
-    evaluation: { rating: null, audioUrl: '', notes: '', evaluatedAt: null },
   };
   return {
     domainVersion: CANONICAL_DOMAIN_VERSION,
@@ -424,14 +429,6 @@ export function isRenderedPrompt(value: unknown): value is RenderedPrompt {
     && isFiniteNumber(value.renderedAt);
 }
 
-export function isEvaluation(value: unknown): value is Evaluation {
-  return isRecord(value)
-    && (value.rating === null || [1, 2, 3, 4, 5].includes(Number(value.rating)))
-    && typeof value.audioUrl === 'string'
-    && typeof value.notes === 'string'
-    && (value.evaluatedAt === null || isFiniteNumber(value.evaluatedAt));
-}
-
 export function isGenerationRun(value: unknown): value is GenerationRun {
   return isRecord(value)
     && typeof value.id === 'string'
@@ -439,12 +436,21 @@ export function isGenerationRun(value: unknown): value is GenerationRun {
     && isFiniteNumber(value.createdAt)
     && (value.model === 'v6' || value.model === 'v6-wild' || value.model === 'v6-mini')
     && ['create', 'explore', 'edit-section', 'edit-lyrics', 'mashup', 'sample'].includes(String(value.workflow))
+    && isNullableString(value.compilerVersion)
+    && isNullableString(value.revisionHash)
+    && isNullableString(value.externalSongId)
+    && isNullableString(value.externalJobId)
+    && (value.seed === null || isFiniteNumber(value.seed))
+    && isNullableString(value.actualModelVersion)
+    && isStringArray(value.tags)
     && typeof value.submittedPrompt === 'string'
     && typeof value.audioUrl === 'string'
     && (value.rating === null || [1, 2, 3, 4, 5].includes(Number(value.rating)))
     && typeof value.notes === 'string'
     && ['pending', 'running', 'succeeded', 'failed', 'cancelled'].includes(String(value.status))
-    && typeof value.isBest === 'boolean';
+    && typeof value.isBest === 'boolean'
+    && isNullableString(value.bestReason)
+    && (value.isBest || value.bestReason === null);
 }
 
 export function isRevision(value: unknown): value is Revision {
@@ -464,7 +470,7 @@ export function isRevision(value: unknown): value is Revision {
     && value.generationRuns.every(isGenerationRun)
     && new Set(value.generationRuns.map((run) => run.id)).size === value.generationRuns.length
     && value.generationRuns.filter((run) => run.isBest).length <= 1
-    && isEvaluation(value.evaluation);
+    && !('evaluation' in value);
 }
 
 export function isSongProject(value: unknown): value is SongProject {
@@ -497,10 +503,25 @@ export function decodeSongProject(value: unknown): DecodeResult<SongProject> {
     : failure(`Invalid canonical v${CANONICAL_DOMAIN_VERSION} SongProject`);
 }
 
+interface LegacyEvaluation {
+  rating: 1 | 2 | 3 | 4 | 5 | null;
+  audioUrl: string;
+  notes: string;
+  evaluatedAt: number | null;
+}
+
+function isLegacyEvaluation(value: unknown): value is LegacyEvaluation {
+  return isRecord(value)
+    && (value.rating === null || [1, 2, 3, 4, 5].includes(Number(value.rating)))
+    && typeof value.audioUrl === 'string'
+    && typeof value.notes === 'string'
+    && (value.evaluatedAt === null || isFiniteNumber(value.evaluatedAt));
+}
+
 function migrateEvaluationToGenerationRuns(
   revision: Record<string, unknown>,
 ): GenerationRun[] | null {
-  if (!isEvaluation(revision.evaluation)
+  if (!isLegacyEvaluation(revision.evaluation)
     || typeof revision.id !== 'string'
     || !isFiniteNumber(revision.createdAt)
     || !isGenerationTarget(revision.generationTarget)) {
@@ -526,10 +547,19 @@ function migrateEvaluationToGenerationRuns(
 
 function migrateGenerationRunFields(value: unknown): GenerationRun | null {
   if (!isRecord(value)) return null;
+  const isBest = typeof value.isBest === 'boolean' ? value.isBest : false;
   const candidate = {
     ...value,
+    compilerVersion: isNullableString(value.compilerVersion) ? value.compilerVersion : null,
+    revisionHash: isNullableString(value.revisionHash) ? value.revisionHash : null,
+    externalSongId: isNullableString(value.externalSongId) ? value.externalSongId : null,
+    externalJobId: isNullableString(value.externalJobId) ? value.externalJobId : null,
+    seed: value.seed === null || isFiniteNumber(value.seed) ? value.seed : null,
+    actualModelVersion: isNullableString(value.actualModelVersion) ? value.actualModelVersion : null,
+    tags: isStringArray(value.tags) ? [...value.tags] : [],
     submittedPrompt: typeof value.submittedPrompt === 'string' ? value.submittedPrompt : '',
-    isBest: typeof value.isBest === 'boolean' ? value.isBest : false,
+    isBest,
+    bestReason: isBest && isNullableString(value.bestReason) ? value.bestReason : null,
   };
   return isGenerationRun(candidate) ? candidate : null;
 }
@@ -564,17 +594,18 @@ function migrateRevision(value: unknown): Record<string, unknown> | null {
     ? value.generationRuns.map(migrateGenerationRunFields)
     : migrateEvaluationToGenerationRuns(value);
   if (generationRuns === null || generationRuns.some((run) => run === null)) return null;
+  const { evaluation: _legacyEvaluation, ...revision } = value;
   return {
-    ...value,
+    ...revision,
     arrangement: { ...value.arrangement, sections },
     generationRuns,
   };
 }
 
-/** Upgrade canonical projects written by earlier domain/persistence clients. */
-export function migrateLegacyEvaluationProject(value: unknown): DecodeResult<SongProject> {
+/** Upgrade projects only while crossing the legacy persistence boundary. */
+function migrateLegacyPersistedProject(value: unknown): DecodeResult<SongProject> {
   if (!isRecord(value)
-    || (value.domainVersion !== 6 && value.domainVersion !== CANONICAL_DOMAIN_VERSION)
+    || (![6, 7, CANONICAL_DOMAIN_VERSION].includes(Number(value.domainVersion)))
     || !Array.isArray(value.revisions)) {
     return failure(`Invalid canonical v${CANONICAL_DOMAIN_VERSION} SongProject`);
   }
@@ -593,12 +624,14 @@ export function decodePersistedProjectEnvelope(
 ): DecodeResult<PersistedProjectEnvelope> {
   if (!isRecord(value)) return failure('Persisted project envelope must be an object');
   if (value.kind !== 'suno-prompt-gen/project') return failure('Unsupported persisted project kind');
-  if (value.schemaVersion !== LEGACY_PERSISTED_PROJECT_SCHEMA_VERSION
-    && value.schemaVersion !== PERSISTED_PROJECT_SCHEMA_VERSION) {
+  const isLegacySchema = LEGACY_PERSISTED_PROJECT_SCHEMA_VERSIONS.includes(value.schemaVersion as 1 | 2);
+  if (!isLegacySchema && value.schemaVersion !== PERSISTED_PROJECT_SCHEMA_VERSION) {
     return failure(`Unsupported persisted project schemaVersion: ${String(value.schemaVersion)}`);
   }
   if (!isFiniteNumber(value.savedAt)) return failure('Persisted project savedAt must be a number');
-  const decodedProject = migrateLegacyEvaluationProject(value.project);
+  const decodedProject = isLegacySchema
+    ? migrateLegacyPersistedProject(value.project)
+    : decodeSongProject(value.project);
   if (!decodedProject.ok) return failure(...decodedProject.errors.map((error) => `project: ${error}`));
   return success({
     kind: 'suno-prompt-gen/project',

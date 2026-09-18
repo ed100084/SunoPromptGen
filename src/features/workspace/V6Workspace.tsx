@@ -13,11 +13,12 @@ import {
   createDefaultSongProject,
   deleteRevision,
   getActiveRevision,
+  computeRevisionHash,
   selectRevision,
   type Revision,
   type SongProject,
 } from '../../domain';
-import { compilePrompt, type GenerationTarget as CompilerTarget, type PromptSong } from '../../prompt';
+import { compilePrompt, PROMPT_COMPILER_VERSION, type GenerationTarget as CompilerTarget, type PromptSong } from '../../prompt';
 import {
   deleteProject,
   exportProjects,
@@ -34,6 +35,8 @@ import { workspaceReducer, type WorkspaceDraft } from './workspaceReducer';
 import { StructuredSectionEditor, type StructuredSection } from './StructuredSectionEditor';
 import { GenerationRunsPanel } from './GenerationRunsPanel';
 import type { GenerationRunDraft } from './GenerationRunsPanel.helpers';
+import { WorkspaceStageNav } from './WorkspaceStageNav';
+import type { WorkspaceStageId } from './WorkspaceStageNav.helpers';
 import { PresetPicker } from '../../components/PresetPicker';
 import { applyV6Preset, type V6Preset, type V6PresetId } from '../../presets';
 
@@ -233,7 +236,6 @@ function revisionFromDraft(draft: Draft, parentRevisionId: string | null): Revis
       renderedAt: now,
     },
     generationRuns: [],
-    evaluation: { rating: null, audioUrl: '', notes: '', evaluatedAt: null },
   };
 }
 
@@ -259,6 +261,7 @@ export function V6Workspace() {
   const [statusMessage, setStatusMessage] = useState('');
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(DEFAULT_DRAFT));
   const [selectedPresetId, setSelectedPresetId] = useState<V6PresetId | null>(null);
+  const [activeStage, setActiveStage] = useState<WorkspaceStageId>('brief');
   const isDirty = JSON.stringify(draft) !== savedSnapshot;
   const rendered = useMemo(() => compilePrompt(toCompilerTarget({
     ...draft,
@@ -373,6 +376,9 @@ export function V6Workspace() {
       createdAt: now,
       model: activeRevision.generationTarget.model,
       workflow: activeRevision.generationTarget.workflow,
+      compilerVersion: PROMPT_COMPILER_VERSION,
+      revisionHash: computeRevisionHash(activeRevision),
+      tags: selectedPresetId ? [`preset:${selectedPresetId}`] : [],
       audioUrl,
       rating,
       notes,
@@ -426,6 +432,9 @@ export function V6Workspace() {
       createdAt: now,
       model: revision.generationTarget.model,
       workflow: revision.generationTarget.workflow,
+      compilerVersion: PROMPT_COMPILER_VERSION,
+      revisionHash: computeRevisionHash(revision),
+      tags: selectedPresetId ? [`preset:${selectedPresetId}`] : [],
     })), '已新增 Generation Run。');
   };
 
@@ -489,6 +498,21 @@ export function V6Workspace() {
     </header>
 
     <main className="mx-auto max-w-[1500px] px-4 py-6 lg:px-8">
+      <WorkspaceStageNav
+        activeStageId={activeStage}
+        onStageChange={(stage) => {
+          setActiveStage(stage);
+          document.getElementById(`stage-${stage}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }}
+        completedStageIds={[
+          ...(draft.concept.trim() ? ['brief' as const] : []),
+          ...(draft.sections.length ? ['arrangement' as const] : []),
+          ...(draft.lyrics.trim() ? ['lyrics' as const] : []),
+          ...(rendered.primaryPrompt.trim() ? ['prompt' as const] : []),
+          ...(activeRevision?.generationRuns.length ? ['results' as const] : []),
+        ]}
+        variant="collapsible"
+      />
       <WorkflowPicker value={draft.workflow} onChange={(value) => set('workflow', value)} />
       <PresetPicker value={selectedPresetId} onSelect={applyPresetToDraft} className="mb-5" />
 
@@ -516,15 +540,15 @@ export function V6Workspace() {
         <section className="space-y-5">
           <ModelStrategyPicker value={draft.model} onChange={(value) => set('model', value)} />
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">02 · Creative brief</p><h2 className="mb-5 mt-1 text-xl font-bold">先說清楚要創作什麼</h2><div className="space-y-4"><Field label="作品名稱"><input className={inputClass} value={draft.title} onChange={(e) => set('title', e.target.value)} placeholder="未命名作品" /></Field><Field label="一句話創作意圖" hint="主題、情境與情緒轉變，比曲風標籤更重要"><textarea className={inputClass} rows={3} value={draft.concept} onChange={(e) => set('concept', e.target.value)} /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="語言"><input className={inputClass} value={draft.language} onChange={(e) => set('language', e.target.value)} /></Field><Field label="Tempo"><input className={inputClass} value={draft.tempo} onChange={(e) => set('tempo', e.target.value)} /></Field><Field label="Genre directions"><input className={inputClass} value={draft.genres} onChange={(e) => set('genres', e.target.value)} /></Field><Field label="Mood arc"><input className={inputClass} value={draft.moods} onChange={(e) => set('moods', e.target.value)} /></Field></div><Field label="Overall feel / 場景"><textarea className={inputClass} rows={3} value={draft.overallFeel} onChange={(e) => set('overallFeel', e.target.value)} /></Field></div></div>
+          <div id="stage-brief" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">02 · Creative brief</p><h2 className="mb-5 mt-1 text-xl font-bold">先說清楚要創作什麼</h2><div className="space-y-4"><Field label="作品名稱"><input className={inputClass} value={draft.title} onChange={(e) => set('title', e.target.value)} placeholder="未命名作品" /></Field><Field label="一句話創作意圖" hint="主題、情境與情緒轉變，比曲風標籤更重要"><textarea className={inputClass} rows={3} value={draft.concept} onChange={(e) => set('concept', e.target.value)} /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="語言"><input className={inputClass} value={draft.language} onChange={(e) => set('language', e.target.value)} /></Field><Field label="Tempo"><input className={inputClass} value={draft.tempo} onChange={(e) => set('tempo', e.target.value)} /></Field><Field label="Genre directions"><input className={inputClass} value={draft.genres} onChange={(e) => set('genres', e.target.value)} /></Field><Field label="Mood arc"><input className={inputClass} value={draft.moods} onChange={(e) => set('moods', e.target.value)} /></Field></div><Field label="Overall feel / 場景"><textarea className={inputClass} rows={3} value={draft.overallFeel} onChange={(e) => set('overallFeel', e.target.value)} /></Field></div></div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">03 · Musical plan</p><h2 className="mb-5 mt-1 text-xl font-bold">描述角色與發展，不只列出樂器</h2><div className="space-y-4"><Field label="Instrumentation" hint="可描述樂器的角色、音色、演奏方式與進場時機"><textarea className={inputClass} rows={3} value={draft.instruments} onChange={(e) => set('instruments', e.target.value)} /></Field><Field label="Vocal direction"><textarea className={inputClass} rows={2} value={draft.vocals} onChange={(e) => set('vocals', e.target.value)} /></Field><Field label="Structure overview"><textarea className={inputClass} rows={2} value={draft.structure} onChange={(e) => set('structure', e.target.value)} /></Field><Field label="Avoid" hint="只保留真正會破壞方向的限制"><input className={inputClass} value={draft.avoid} onChange={(e) => set('avoid', e.target.value)} /></Field><div><p className="mb-1.5 text-sm font-semibold">Structured sections</p><p className="mb-3 text-xs text-slate-500">每段可指定功能、能量、編制與歌詞；鎖定段落不會被誤改或移動。</p><StructuredSectionEditor sections={draft.sections} onChange={(sections: StructuredSection[]) => set('sections', sections)} /></div></div></div>
+          <div id="stage-arrangement" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">03 · Musical plan</p><h2 className="mb-5 mt-1 text-xl font-bold">描述角色與發展，不只列出樂器</h2><div className="space-y-4"><Field label="Instrumentation" hint="可描述樂器的角色、音色、演奏方式與進場時機"><textarea className={inputClass} rows={3} value={draft.instruments} onChange={(e) => set('instruments', e.target.value)} /></Field><Field label="Vocal direction"><textarea className={inputClass} rows={2} value={draft.vocals} onChange={(e) => set('vocals', e.target.value)} /></Field><Field label="Structure overview"><textarea className={inputClass} rows={2} value={draft.structure} onChange={(e) => set('structure', e.target.value)} /></Field><Field label="Avoid" hint="只保留真正會破壞方向的限制"><input className={inputClass} value={draft.avoid} onChange={(e) => set('avoid', e.target.value)} /></Field><div><p className="mb-1.5 text-sm font-semibold">Structured sections</p><p className="mb-3 text-xs text-slate-500">每段可指定功能、能量、編制與歌詞；鎖定段落不會被誤改或移動。</p><StructuredSectionEditor sections={draft.sections} onChange={(sections: StructuredSection[]) => set('sections', sections)} /></div></div></div>
 
           {draft.workflow === 'explore' && <div className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-5 dark:border-fuchsia-900 dark:bg-fuchsia-950/20"><h2 className="mb-3 font-bold">探索軸線</h2><textarea className={inputClass} rows={3} value={draft.exploration} onChange={(e) => set('exploration', e.target.value)} /></div>}
           {(draft.workflow === 'edit-section' || draft.workflow === 'edit-lyrics') && <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5 dark:border-sky-900 dark:bg-sky-950/20"><h2 className="mb-4 font-bold">局部編修契約</h2><div className="space-y-4"><Field label="Scope"><input className={inputClass} value={draft.scope} onChange={(e) => set('scope', e.target.value)} /></Field><Field label="Preserve"><textarea className={inputClass} rows={2} value={draft.preserve} onChange={(e) => set('preserve', e.target.value)} /></Field><Field label="Change"><textarea className={inputClass} rows={2} value={draft.change} onChange={(e) => set('change', e.target.value)} /></Field></div></div>}
           {(draft.workflow === 'mashup' || draft.workflow === 'sample') && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/20"><div className="mb-4 flex items-center justify-between"><h2 className="font-bold">來源與角色</h2>{draft.workflow === 'mashup' && <button onClick={addSource} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white">＋ 新增來源</button>}</div><div className="space-y-3">{draft.sources.slice(0, draft.workflow === 'sample' ? 1 : undefined).map((source, index) => <div key={source.id} className="grid gap-3 rounded-xl border border-amber-200 bg-white/60 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] dark:border-amber-900 dark:bg-slate-900/40"><input className={inputClass} placeholder={`Source ${index + 1} 名稱`} value={source.name} onChange={(e) => updateSource(source.id, 'name', e.target.value)} /><input className={inputClass} placeholder="角色，例如 drums" value={source.role} onChange={(e) => updateSource(source.id, 'role', e.target.value)} /><input className={inputClass} placeholder="00:12-00:28" value={source.range} onChange={(e) => updateSource(source.id, 'range', e.target.value)} />{draft.workflow === 'mashup' && draft.sources.length > 2 && <button onClick={() => removeSource(source.id)} className="px-2 text-rose-600" aria-label={`移除來源 ${index + 1}`}>✕</button>}</div>)}</div><label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.rightsConfirmed} onChange={(e) => set('rightsConfirmed', e.target.checked)} />我確認擁有或獲准使用這些來源素材</label></div>}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">04 · Lyrics</p><h2 className="mb-4 mt-1 text-xl font-bold">歌詞與局部精修</h2><textarea className={inputClass} rows={12} value={draft.lyrics} onChange={(e) => set('lyrics', e.target.value)} placeholder="可貼入既有歌詞，或留空只生成音樂方向…" />{draft.lyrics.trim() && <div className="mt-4"><Suspense fallback={<p className="text-xs text-slate-500">載入歌詞分析…</p>}><LyricsAnalyzer lyrics={draft.lyrics} tag="Full Lyrics" /></Suspense></div>}</div>
+          <div id="stage-lyrics" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">04 · Lyrics</p><h2 className="mb-4 mt-1 text-xl font-bold">歌詞與局部精修</h2><textarea className={inputClass} rows={12} value={draft.lyrics} onChange={(e) => set('lyrics', e.target.value)} placeholder="可貼入既有歌詞，或留空只生成音樂方向…" />{draft.lyrics.trim() && <div className="mt-4"><Suspense fallback={<p className="text-xs text-slate-500">載入歌詞分析…</p>}><LyricsAnalyzer lyrics={draft.lyrics} tag="Full Lyrics" /></Suspense></div>}</div>
           <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">載入 AI 歌詞工具…</div>}><LyricsAiPanel
             lyrics={draft.lyrics}
             onApply={(lyrics) => set('lyrics', lyrics)}
@@ -545,7 +569,7 @@ export function V6Workspace() {
         </section>
 
         <div className="space-y-5">
-        <PromptPreview
+        <div id="stage-prompt" className="scroll-mt-24"><PromptPreview
           rendered={rendered}
           workflow={workflow}
           workflowId={draft.workflow}
@@ -555,8 +579,8 @@ export function V6Workspace() {
           onCopy={copyPrompt}
           onSaveRevision={saveRevision}
           onExportProject={exportProject}
-        />
-        {activeRevision && <GenerationRunsPanel
+        /></div>
+        {activeRevision && <div id="stage-results" className="scroll-mt-24"><GenerationRunsPanel
           revision={activeRevision}
           onAdd={addRun}
           onUpdate={(runId, update) => updateActiveRevision((revision) => updateGenerationRun(revision, runId, update), 'Generation Run 已更新。')}
@@ -564,7 +588,7 @@ export function V6Workspace() {
           onStatusChange={(runId, status) => updateActiveRevision((revision) => setGenerationRunStatus(revision, runId, status), 'Generation Run 狀態已更新。')}
           onMarkBest={(runId) => updateActiveRevision((revision) => markBestGenerationRun(revision, runId), '最佳 Generation Run 已更新。')}
           confirmDelete={() => window.confirm('刪除這筆 Generation Run？')}
-        />}
+        /></div>}
         </div>
       </div>
     </main>

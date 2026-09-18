@@ -58,7 +58,7 @@ export function appendGenerationRun(revision: Revision, run: GenerationRun): Rev
     throw new Error(`Generation run already exists: ${run.id}`);
   }
   return updateRevisionRuns(revision, (runs) => [
-    ...runs.map((item) => run.isBest ? { ...item, isBest: false } : item),
+    ...runs.map((item) => run.isBest ? { ...item, isBest: false, bestReason: null } : item),
     run,
   ]);
 }
@@ -74,7 +74,7 @@ export function updateGenerationRun(
   if (!isGenerationRun(next)) throw new Error('Invalid generation run update');
   return updateRevisionRuns(revision, (runs) => runs.map((run) => {
     if (run.id === runId) return next;
-    return next.isBest ? { ...run, isBest: false } : run;
+    return next.isBest ? { ...run, isBest: false, bestReason: null } : run;
   }));
 }
 
@@ -100,6 +100,7 @@ export function markBestGenerationRun(revision: Revision, runId: string | null):
   return updateRevisionRuns(revision, (runs) => runs.map((run) => ({
     ...run,
     isBest: runId !== null && run.id === runId,
+    bestReason: runId !== null && run.id === runId ? run.bestReason : null,
   })));
 }
 

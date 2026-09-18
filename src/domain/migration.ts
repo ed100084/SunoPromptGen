@@ -164,7 +164,6 @@ export function migrateLegacySongState(
         }
       : null,
     generationRuns: [],
-    evaluation: { rating: null, audioUrl: '', notes: '', evaluatedAt: null },
   };
   return {
     domainVersion: CANONICAL_DOMAIN_VERSION,
@@ -187,13 +186,7 @@ export function migrateLegacyHistoryEntry(entry: HistoryEntry): PersistedProject
   });
   if (entry.result) {
     const revision = project.revisions[0];
-    revision.evaluation = {
-      rating: entry.result.rating ?? null,
-      audioUrl: entry.result.audioUrl ?? '',
-      notes: entry.result.notes ?? '',
-      evaluatedAt: entry.result.ratedAt ?? null,
-    };
-    revision.generationRuns?.push(createDefaultGenerationRun({
+    revision.generationRuns.push(createDefaultGenerationRun({
       id: `${revision.id}-legacy-evaluation`,
       createdAt: entry.result.ratedAt ?? entry.savedAt,
       model: revision.generationTarget.model,

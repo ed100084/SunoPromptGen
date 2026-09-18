@@ -1,5 +1,7 @@
 import type { Revision, SourceReference } from '../domain';
 import { checkPromptQuality } from './quality';
+export const PROMPT_COMPILER_VERSION = 'v1' as const;
+
 import type {
   EditDirective,
   GenerationModel,

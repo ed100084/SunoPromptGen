@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeCanonicalInsights } from './insights';
-import { createDefaultSongProject, type Revision, type SongProject } from './model';
+import { createDefaultGenerationRun, createDefaultSongProject, type Revision, type SongProject } from './model';
 
 function revision(
   base: Revision,
@@ -9,7 +9,7 @@ function revision(
     parentRevisionId?: string | null;
     model?: Revision['generationTarget']['model'];
     workflow?: Revision['generationTarget']['workflow'];
-    rating?: Revision['evaluation']['rating'];
+    rating?: 1 | 2 | 3 | 4 | 5 | null;
     variant?: string | null;
   },
 ): Revision {
@@ -23,10 +23,16 @@ function revision(
       workflow: overrides.workflow ?? base.generationTarget.workflow,
       variant: overrides.variant ?? null,
     },
-    evaluation: {
-      ...base.evaluation,
-      rating: overrides.rating ?? null,
-    },
+    generationRuns: overrides.rating == null ? [] : [{
+      ...base.generationRuns[0],
+      id: `${overrides.id}-run`, createdAt: base.createdAt,
+      model: overrides.model ?? base.generationTarget.model,
+      workflow: overrides.workflow ?? base.generationTarget.workflow,
+      audioUrl: '', rating: overrides.rating, notes: '', status: 'succeeded',
+      submittedPrompt: '', isBest: false, compilerVersion: null, revisionHash: null,
+      externalSongId: null, externalJobId: null, seed: null, actualModelVersion: null,
+      tags: [], bestReason: null,
+    }],
   };
 }
 
@@ -162,7 +168,7 @@ describe('analyzeCanonicalInsights', () => {
   it('可顯式納入 migrated canonical project', () => {
     const migrated = createDefaultSongProject({ id: 'migrated', revisionId: 'r', now: 1 });
     migrated.revisions[0].generationTarget.variant = 'migrated-from:v5';
-    migrated.revisions[0].evaluation.rating = 2;
+    migrated.revisions[0].generationRuns = revision(migrated.revisions[0], { id: 'rated', rating: 2 }).generationRuns;
 
     const report = analyzeCanonicalInsights([migrated], { includeMigrated: true });
 
@@ -190,6 +196,33 @@ describe('analyzeCanonicalInsights', () => {
 
     expect(report.revisionDepth.orphanParentCount).toBe(1);
     expect(report.revisionDepth.distribution[0]).toMatchObject({ key: 0, count: 1 });
+  });
+
+  it('以 run provenance 做 model/workflow/preset/tag 產品分群與 best 比較', () => {
+    const project = createDefaultSongProject({ id: 'analytics', revisionId: 'r', now: 1 });
+    project.revisions[0].generationRuns = [
+      createDefaultGenerationRun({
+        id: 'best', createdAt: 2, model: 'v6', workflow: 'create', actualModelVersion: 'suno-v6.2',
+        tags: ['preset:cinematic', 'experiment:a'], status: 'succeeded', rating: 5, isBest: true, bestReason: '最符合 brief',
+      }),
+      createDefaultGenerationRun({
+        id: 'other', createdAt: 3, model: 'v6', workflow: 'create', actualModelVersion: 'suno-v6.2',
+        tags: ['preset:cinematic', 'experiment:b'], status: 'failed', rating: 2,
+      }),
+    ];
+
+    const report = analyzeCanonicalInsights([project], { lowSampleThreshold: 3 });
+
+    expect(report.runAnalytics.disclaimer).toContain('不代表因果');
+    expect(report.runAnalytics.groups.models[0]).toMatchObject({
+      key: 'suno-v6.2', count: 2, succeededCount: 1, successRate: 0.5, averageRating: 3.5, lowSample: true,
+    });
+    expect(report.runAnalytics.groups.presets[0]).toMatchObject({ key: 'cinematic', count: 2 });
+    expect(report.runAnalytics.groups.tags.map(({ key }) => key)).toEqual([
+      'preset:cinematic', 'experiment:a', 'experiment:b',
+    ]);
+    expect(report.runAnalytics.bestVsOthers.best).toMatchObject({ count: 1, averageRating: 5, bestRate: 1 });
+    expect(report.runAnalytics.bestVsOthers.others).toMatchObject({ count: 1, averageRating: 2, bestRate: 0 });
   });
 
   it('遇到循環 parent 鏈不遞迴溢位並回報資料品質', () => {

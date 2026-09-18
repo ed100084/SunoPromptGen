@@ -19,6 +19,8 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 - **Structured Section Editor** — canonical schema 完整保存每段 ID、名稱、角色、能量、編制、歌詞與鎖定狀態，並支援新增、刪除及排序
 - **Generation Runs** — 每個 Revision 可保存、編輯與刪除多次生成結果，包含實際 submitted prompt、音檔 URL、狀態、備註、獨立評分、最佳結果與 A/B 比較
 - **Prompt Quality Review** — 檢查矛盾方向、缺少 edit scope、來源資訊、過度抽象與 competing styles；所有檢查均標示為產品 heuristic，並非 Suno 官方規格
+- **Generation Run 可追溯性** — 保存 compiler 版本、Revision hash、外部 Song/Job ID、seed、實際模型版本、tags 與最佳結果原因
+- **五階段工作流** — Brief、Arrangement、Lyrics、Prompt、Results 導覽，桌面與行動版皆可快速定位
 - **Generation Run 紀錄** — 同一 Revision 可保存多次輸出、音檔網址、狀態、備註與個別星等，不再把一次評分等同整個版本
 - **Project Revisions** — 保存父子版本、模型與工作流，可從任意舊版建立分支、評分、刪除 leaf revision，並顯示結構化差異
 - **備份與還原** — 版本化 Project envelope 匯入／匯出；匯入預設合併並以相同 project id 更新，不會清空其他作品
