@@ -5,6 +5,7 @@ import {
   createDefaultArrangement,
   createDefaultConstraints,
   createDefaultCreativeBrief,
+  createDefaultGenerationRun,
   createDefaultGenerationTarget,
   createDefaultVocalIntent,
   createInstrumentalIntent,
@@ -158,6 +159,7 @@ export function migrateLegacySongState(
           renderedAt: createdAt,
         }
       : null,
+    generationRuns: [],
     evaluation: { rating: null, audioUrl: '', notes: '', evaluatedAt: null },
   };
   return {
@@ -179,6 +181,25 @@ export function migrateLegacyHistoryEntry(entry: HistoryEntry): PersistedProject
     lyricsPrompt: entry.lyricsPrompt,
     sunoVersion: entry.sunoVersion,
   });
+  if (entry.result) {
+    const revision = project.revisions[0];
+    revision.evaluation = {
+      rating: entry.result.rating ?? null,
+      audioUrl: entry.result.audioUrl ?? '',
+      notes: entry.result.notes ?? '',
+      evaluatedAt: entry.result.ratedAt ?? null,
+    };
+    revision.generationRuns?.push(createDefaultGenerationRun({
+      id: `${revision.id}-legacy-evaluation`,
+      createdAt: entry.result.ratedAt ?? entry.savedAt,
+      model: revision.generationTarget.model,
+      workflow: revision.generationTarget.workflow,
+      audioUrl: entry.result.audioUrl ?? '',
+      rating: entry.result.rating ?? null,
+      notes: entry.result.notes ?? '',
+      status: 'succeeded',
+    }));
+  }
   return {
     kind: 'suno-prompt-gen/project',
     schemaVersion: PERSISTED_PROJECT_SCHEMA_VERSION,

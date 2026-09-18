@@ -2,7 +2,9 @@ import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useTheme } from '../../hooks/useTheme';
 import {
   analyzeCanonicalInsights,
+  appendGenerationRun,
   appendRevision,
+  createDefaultGenerationRun,
   compareRevisions,
   createDefaultSongProject,
   deleteRevision,
@@ -27,6 +29,7 @@ import { PromptPreview } from './PromptPreview';
 import { WorkflowPicker, WORKFLOWS } from './WorkflowPicker';
 import { LyricsAiPanel } from './LyricsAiPanel';
 import { workspaceReducer, type WorkspaceDraft } from './workspaceReducer';
+import { StructuredSectionEditor, type StructuredSection } from './StructuredSectionEditor';
 
 type Draft = WorkspaceDraft;
 
@@ -42,6 +45,10 @@ const DEFAULT_DRAFT: Draft = {
   key: 'A major',
   overallFeel: '雨夜城市逐漸迎來晨光；親密、真誠，最後展開成寬廣而有希望的畫面',
   structure: 'Intro, Verse 1, Pre-Chorus, Chorus, Verse 2, Chorus, Bridge, Final Chorus, Outro',
+  sections: [
+    { id: 'section-verse', name: 'Verse 1', role: '建立場景與敘事視角', energy: 'low', instrumentation: 'warm piano', lyrics: '', locked: false },
+    { id: 'section-chorus', name: 'Chorus', role: '核心 hook 與情緒釋放', energy: 'high', instrumentation: 'full drums and strings', lyrics: '', locked: false },
+  ],
   lyrics: '',
   avoid: 'excessive autotune, abrupt transitions, generic EDM drop',
   workflow: 'create',
@@ -119,6 +126,15 @@ function draftFromRevision(revision: Revision): Draft {
     key: revision.arrangement.key,
     overallFeel: revision.brief.additionalDirection,
     structure: csv(revision.arrangement.sections.map((section) => section.tag)),
+    sections: revision.arrangement.sections.map((section, index) => ({
+      id: `${revision.id}-section-${index}`,
+      name: section.tag,
+      role: section.description,
+      energy: '',
+      instrumentation: '',
+      lyrics: section.lyrics,
+      locked: false,
+    })),
     lyrics: revision.arrangement.sections.map((section) => section.lyrics).filter(Boolean).join('\n\n'),
     avoid: csv(revision.constraints.avoid),
     model: revision.generationTarget.model,
@@ -161,7 +177,11 @@ function revisionFromDraft(draft: Draft, parentRevisionId: string | null): Revis
       bpm: Number.parseInt(draft.tempo, 10) || null,
       key: draft.key,
       structureName: 'Custom v6 plan',
-      sections: list(draft.structure).map((tag) => ({ tag, description: '', lyrics: '' })),
+      sections: draft.sections.map((section) => ({
+        tag: section.name,
+        description: [section.role, section.energy && `Energy: ${section.energy}`, section.instrumentation && `Instrumentation: ${section.instrumentation}`].filter(Boolean).join(' · '),
+        lyrics: section.lyrics,
+      })),
       instruments: list(draft.instruments),
       textures: [],
       cohesion: true,
@@ -199,6 +219,7 @@ function revisionFromDraft(draft: Draft, parentRevisionId: string | null): Revis
       lyrics: draft.lyrics,
       renderedAt: now,
     },
+    generationRuns: [],
     evaluation: { rating: null, audioUrl: '', notes: '', evaluatedAt: null },
   };
 }
@@ -225,7 +246,13 @@ export function V6Workspace() {
   const [statusMessage, setStatusMessage] = useState('');
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(DEFAULT_DRAFT));
   const isDirty = JSON.stringify(draft) !== savedSnapshot;
-  const rendered = useMemo(() => compilePrompt(toCompilerTarget(draft)), [draft]);
+  const rendered = useMemo(() => compilePrompt(toCompilerTarget({
+    ...draft,
+    structure: draft.sections.length ? draft.sections.map((section) => section.name).join(', ') : draft.structure,
+    lyrics: draft.sections.some((section) => section.lyrics.trim())
+      ? draft.sections.map((section) => `[${section.name}]\n${section.lyrics}`).join('\n\n')
+      : draft.lyrics,
+  })), [draft]);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => dispatch({ type: 'set', key, value });
   const updateSource = (id: string, field: 'name' | 'role' | 'range', value: string) => {
     dispatch({ type: 'source-update', id, field, value });
@@ -324,19 +351,29 @@ export function V6Workspace() {
     }
   };
 
-  const evaluateRevision = (rating: 1 | 2 | 3 | 4 | 5, notes: string) => {
-    if (!activeProject) return;
+  const addGenerationRun = (rating: 1 | 2 | 3 | 4 | 5, notes: string, audioUrl = '') => {
+    if (!activeProject || !activeRevision) return;
     const now = Date.now();
+    const run = createDefaultGenerationRun({
+      id: `run-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: now,
+      model: activeRevision.generationTarget.model,
+      workflow: activeRevision.generationTarget.workflow,
+      audioUrl,
+      rating,
+      notes,
+      status: 'succeeded',
+    });
     const next = projects.map((project) => project.id === activeProject.id ? {
       ...project,
       updatedAt: now,
-      revisions: project.revisions.map((revision) => revision.id === project.activeRevisionId ? {
-        ...revision,
-        evaluation: { ...revision.evaluation, rating, notes, evaluatedAt: now },
-      } : revision),
+      revisions: project.revisions.map((revision) => revision.id === project.activeRevisionId
+        ? appendGenerationRun(revision, run)
+        : revision),
     } : project);
     setProjects(next);
-    void saveProjects(next).catch((error) => console.warn('[projects] rating save failed:', error));
+    void saveProjects(next).then(() => setStatusMessage('已記錄一筆 Generation Run。'))
+      .catch((error) => setStatusMessage(`評分儲存失敗：${(error as Error).message}`));
   };
 
   const copyPrompt = async () => {
@@ -411,7 +448,7 @@ export function V6Workspace() {
           onNewProject={() => { if (!mayDiscardDraft()) return; dispatch({ type: 'replace', draft: DEFAULT_DRAFT }); setSavedSnapshot(JSON.stringify(DEFAULT_DRAFT)); setActiveProjectId(null); }}
           onLoadProject={loadProject}
           onLoadRevision={loadRevision}
-          onEvaluateRevision={evaluateRevision}
+          onEvaluateRevision={addGenerationRun}
           onDeleteProject={removeActiveProject}
           onDeleteRevision={removeActiveRevision}
           onExportAll={() => void exportAll()}
@@ -427,7 +464,7 @@ export function V6Workspace() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">02 · Creative brief</p><h2 className="mb-5 mt-1 text-xl font-bold">先說清楚要創作什麼</h2><div className="space-y-4"><Field label="作品名稱"><input className={inputClass} value={draft.title} onChange={(e) => set('title', e.target.value)} placeholder="未命名作品" /></Field><Field label="一句話創作意圖" hint="主題、情境與情緒轉變，比曲風標籤更重要"><textarea className={inputClass} rows={3} value={draft.concept} onChange={(e) => set('concept', e.target.value)} /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="語言"><input className={inputClass} value={draft.language} onChange={(e) => set('language', e.target.value)} /></Field><Field label="Tempo"><input className={inputClass} value={draft.tempo} onChange={(e) => set('tempo', e.target.value)} /></Field><Field label="Genre directions"><input className={inputClass} value={draft.genres} onChange={(e) => set('genres', e.target.value)} /></Field><Field label="Mood arc"><input className={inputClass} value={draft.moods} onChange={(e) => set('moods', e.target.value)} /></Field></div><Field label="Overall feel / 場景"><textarea className={inputClass} rows={3} value={draft.overallFeel} onChange={(e) => set('overallFeel', e.target.value)} /></Field></div></div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">03 · Musical plan</p><h2 className="mb-5 mt-1 text-xl font-bold">描述角色與發展，不只列出樂器</h2><div className="space-y-4"><Field label="Instrumentation" hint="可描述樂器的角色、音色、演奏方式與進場時機"><textarea className={inputClass} rows={3} value={draft.instruments} onChange={(e) => set('instruments', e.target.value)} /></Field><Field label="Vocal direction"><textarea className={inputClass} rows={2} value={draft.vocals} onChange={(e) => set('vocals', e.target.value)} /></Field><Field label="Structure / energy arc"><textarea className={inputClass} rows={3} value={draft.structure} onChange={(e) => set('structure', e.target.value)} /></Field><Field label="Avoid" hint="只保留真正會破壞方向的限制"><input className={inputClass} value={draft.avoid} onChange={(e) => set('avoid', e.target.value)} /></Field></div></div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">03 · Musical plan</p><h2 className="mb-5 mt-1 text-xl font-bold">描述角色與發展，不只列出樂器</h2><div className="space-y-4"><Field label="Instrumentation" hint="可描述樂器的角色、音色、演奏方式與進場時機"><textarea className={inputClass} rows={3} value={draft.instruments} onChange={(e) => set('instruments', e.target.value)} /></Field><Field label="Vocal direction"><textarea className={inputClass} rows={2} value={draft.vocals} onChange={(e) => set('vocals', e.target.value)} /></Field><Field label="Structure overview"><textarea className={inputClass} rows={2} value={draft.structure} onChange={(e) => set('structure', e.target.value)} /></Field><Field label="Avoid" hint="只保留真正會破壞方向的限制"><input className={inputClass} value={draft.avoid} onChange={(e) => set('avoid', e.target.value)} /></Field><div><p className="mb-1.5 text-sm font-semibold">Structured sections</p><p className="mb-3 text-xs text-slate-500">每段可指定功能、能量、編制與歌詞；鎖定段落不會被誤改或移動。</p><StructuredSectionEditor sections={draft.sections} onChange={(sections: StructuredSection[]) => set('sections', sections)} /></div></div></div>
 
           {draft.workflow === 'explore' && <div className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-5 dark:border-fuchsia-900 dark:bg-fuchsia-950/20"><h2 className="mb-3 font-bold">探索軸線</h2><textarea className={inputClass} rows={3} value={draft.exploration} onChange={(e) => set('exploration', e.target.value)} /></div>}
           {(draft.workflow === 'edit-section' || draft.workflow === 'edit-lyrics') && <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5 dark:border-sky-900 dark:bg-sky-950/20"><h2 className="mb-4 font-bold">局部編修契約</h2><div className="space-y-4"><Field label="Scope"><input className={inputClass} value={draft.scope} onChange={(e) => set('scope', e.target.value)} /></Field><Field label="Preserve"><textarea className={inputClass} rows={2} value={draft.preserve} onChange={(e) => set('preserve', e.target.value)} /></Field><Field label="Change"><textarea className={inputClass} rows={2} value={draft.change} onChange={(e) => set('change', e.target.value)} /></Field></div></div>}

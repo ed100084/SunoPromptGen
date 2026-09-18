@@ -1,4 +1,4 @@
-import type { Revision, SongProject } from './model';
+import { isGenerationRun, type GenerationRun, type Revision, type SongProject } from './model';
 
 export interface StructuredChange {
   field: string;
@@ -37,6 +37,40 @@ export function selectRevision(project: SongProject, revisionId: string): SongPr
     throw new Error(`Revision does not exist: ${revisionId}`);
   }
   return { ...project, activeRevisionId: revisionId };
+}
+
+function updateRevisionRuns(
+  revision: Revision,
+  update: (runs: GenerationRun[]) => GenerationRun[],
+): Revision {
+  return { ...revision, generationRuns: update(revision.generationRuns ?? []).map((run) => structuredClone(run)) };
+}
+
+export function appendGenerationRun(revision: Revision, run: GenerationRun): Revision {
+  if (!isGenerationRun(run)) throw new Error('Invalid generation run');
+  if ((revision.generationRuns ?? []).some((item) => item.id === run.id)) {
+    throw new Error(`Generation run already exists: ${run.id}`);
+  }
+  return updateRevisionRuns(revision, (runs) => [...runs, run]);
+}
+
+export function updateGenerationRun(
+  revision: Revision,
+  runId: string,
+  update: Partial<Omit<GenerationRun, 'id' | 'createdAt'>>,
+): Revision {
+  const current = (revision.generationRuns ?? []).find((run) => run.id === runId);
+  if (!current) throw new Error(`Generation run does not exist: ${runId}`);
+  const next = { ...current, ...structuredClone(update) };
+  if (!isGenerationRun(next)) throw new Error('Invalid generation run update');
+  return updateRevisionRuns(revision, (runs) => runs.map((run) => run.id === runId ? next : run));
+}
+
+export function deleteGenerationRun(revision: Revision, runId: string): Revision {
+  if (!(revision.generationRuns ?? []).some((run) => run.id === runId)) {
+    throw new Error(`Generation run does not exist: ${runId}`);
+  }
+  return updateRevisionRuns(revision, (runs) => runs.filter((run) => run.id !== runId));
 }
 
 export function deleteRevision(project: SongProject, revisionId: string): SongProject {

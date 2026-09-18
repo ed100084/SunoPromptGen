@@ -195,9 +195,9 @@ describe('compilePrompt workflows', () => {
     });
 
     expect(result.warnings).toEqual([
-      'Edit scope is empty.',
       'Edit preserve list is empty.',
       'Edit change list is empty.',
+      'Product heuristic — not an official Suno specification. The edit has no scope.',
     ]);
   });
 
@@ -243,6 +243,7 @@ describe('compilePrompt workflows', () => {
       'Mashup source 1 name is empty.',
       'Mashup source 1 role is empty.',
       'Mashup source 1 time range is incomplete.',
+      'Product heuristic — not an official Suno specification. Mashup source 1 has no assigned role.',
     ]);
   });
 
@@ -277,9 +278,11 @@ describe('compilePrompt warnings', () => {
     });
 
     expect(result.title).toBe('Untitled prompt');
-    expect(result.warnings).toContain('Song concept is empty.');
     expect(result.warnings).toContain(
-      'v6-mini compresses long structures; use v6 when every section must be controlled precisely.',
+      'Product heuristic — not an official Suno specification. The creative brief is empty.',
+    );
+    expect(result.warnings).toContain(
+      'Product heuristic — not an official Suno specification. v6-mini may compress a structure longer than six sections.',
     );
   });
 });

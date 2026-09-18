@@ -3,7 +3,7 @@ import { workspaceReducer, type WorkspaceDraft } from './workspaceReducer';
 
 const draft = {
   title: '', concept: '', language: '', genres: '', moods: '', instruments: '', vocals: '', tempo: '', key: '',
-  overallFeel: '', structure: '', lyrics: '', avoid: '', workflow: 'create', model: 'v6', exploration: '', scope: '',
+  overallFeel: '', structure: '', sections: [], lyrics: '', avoid: '', workflow: 'create', model: 'v6', exploration: '', scope: '',
   preserve: '', change: '', sources: [{ id: 'a', name: '', role: '', range: '' }], rightsConfirmed: false,
 } satisfies WorkspaceDraft;
 

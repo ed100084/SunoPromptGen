@@ -62,6 +62,15 @@ interface RevisionObservation {
   depth: number;
 }
 
+function revisionRating(revision: Revision): Rating | null {
+  const runs = revision.generationRuns ?? [];
+  for (let index = runs.length - 1; index >= 0; index -= 1) {
+    const rating = runs[index].rating;
+    if (rating !== null) return rating;
+  }
+  return revision.evaluation.rating;
+}
+
 const MODELS: readonly GenerationModel[] = ['v6', 'v6-wild', 'v6-mini'];
 const WORKFLOWS: readonly GenerationWorkflow[] = [
   'create',
@@ -144,7 +153,7 @@ function buildPerformanceBreakdown<T extends string>(
   return keys.map((key) => {
     const matching = observations.filter(({ revision }) => pick(revision) === key);
     const ratings = matching
-      .map(({ revision }) => revision.evaluation.rating)
+      .map(({ revision }) => revisionRating(revision))
       .filter((rating): rating is Rating => rating !== null);
     return {
       key,
@@ -187,7 +196,7 @@ export function analyzeCanonicalInsights(
   }
 
   const ratings = observations
-    .map(({ revision }) => revision.evaluation.rating)
+    .map(({ revision }) => revisionRating(revision))
     .filter((rating): rating is Rating => rating !== null);
   const depthValues = observations.map(({ depth }) => depth);
   const depthKeys = [...new Set(depthValues)].sort((a, b) => a - b);
@@ -222,7 +231,7 @@ export function analyzeCanonicalInsights(
       distribution: depthKeys.map((depth) => {
         const matching = observations.filter((observation) => observation.depth === depth);
         const matchingRatings = matching
-          .map(({ revision }) => revision.evaluation.rating)
+          .map(({ revision }) => revisionRating(revision))
           .filter((rating): rating is Rating => rating !== null);
         return {
           key: depth,

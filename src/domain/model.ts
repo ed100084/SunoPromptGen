@@ -95,6 +95,21 @@ export interface RenderedPrompt {
   renderedAt: number;
 }
 
+export type GenerationRunStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+/** One concrete generation attempt produced from a revision. */
+export interface GenerationRun {
+  id: string;
+  createdAt: number;
+  model: GenerationModel;
+  workflow: GenerationWorkflow;
+  audioUrl: string;
+  rating: 1 | 2 | 3 | 4 | 5 | null;
+  notes: string;
+  status: GenerationRunStatus;
+}
+
+/** Persistence-v1 compatibility shape, migrated into a GenerationRun when non-empty. */
 export interface Evaluation {
   rating: 1 | 2 | 3 | 4 | 5 | null;
   audioUrl: string;
@@ -113,6 +128,9 @@ export interface Revision {
   constraints: Constraints;
   generationTarget: GenerationTarget;
   renderedPrompt: RenderedPrompt | null;
+  /** Concrete outputs generated from this revision. */
+  generationRuns: GenerationRun[];
+  /** @deprecated Transitional single-result projection; use generationRuns. */
   evaluation: Evaluation;
 }
 
@@ -177,6 +195,15 @@ export const DEFAULT_GENERATION_TARGET: Readonly<GenerationTarget> = Object.free
   variant: null,
 });
 
+export const DEFAULT_GENERATION_RUN: Readonly<Omit<GenerationRun, 'id' | 'createdAt'>> = Object.freeze({
+  model: 'v6',
+  workflow: 'create',
+  audioUrl: '',
+  rating: null,
+  notes: '',
+  status: 'pending',
+});
+
 function cloneDefaults<T>(value: T): T {
   return structuredClone(value);
 }
@@ -207,6 +234,12 @@ export function createDefaultGenerationTarget(
   overrides: Partial<GenerationTarget> = {},
 ): GenerationTarget {
   return { ...cloneDefaults(DEFAULT_GENERATION_TARGET), ...overrides };
+}
+
+export function createDefaultGenerationRun(
+  options: Partial<GenerationRun> & Pick<GenerationRun, 'id' | 'createdAt'>,
+): GenerationRun {
+  return { ...cloneDefaults(DEFAULT_GENERATION_RUN), ...options };
 }
 
 export interface NewSongProjectOptions {
@@ -245,6 +278,7 @@ export function createDefaultSongProject(options: NewSongProjectOptions = {}): S
     constraints: createDefaultConstraints(options.constraints),
     generationTarget,
     renderedPrompt: null,
+    generationRuns: [],
     evaluation: { rating: null, audioUrl: '', notes: '', evaluatedAt: null },
   };
   return {
@@ -359,6 +393,19 @@ export function isEvaluation(value: unknown): value is Evaluation {
     && (value.evaluatedAt === null || isFiniteNumber(value.evaluatedAt));
 }
 
+export function isGenerationRun(value: unknown): value is GenerationRun {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && value.id.length > 0
+    && isFiniteNumber(value.createdAt)
+    && (value.model === 'v6' || value.model === 'v6-wild' || value.model === 'v6-mini')
+    && ['create', 'explore', 'edit-section', 'edit-lyrics', 'mashup', 'sample'].includes(String(value.workflow))
+    && typeof value.audioUrl === 'string'
+    && (value.rating === null || [1, 2, 3, 4, 5].includes(Number(value.rating)))
+    && typeof value.notes === 'string'
+    && ['pending', 'running', 'succeeded', 'failed', 'cancelled'].includes(String(value.status));
+}
+
 export function isRevision(value: unknown): value is Revision {
   return isRecord(value)
     && typeof value.id === 'string'
@@ -372,6 +419,9 @@ export function isRevision(value: unknown): value is Revision {
     && isConstraints(value.constraints)
     && isGenerationTarget(value.generationTarget)
     && (value.renderedPrompt === null || isRenderedPrompt(value.renderedPrompt))
+    && Array.isArray(value.generationRuns)
+    && value.generationRuns.every(isGenerationRun)
+    && new Set(value.generationRuns.map((run) => run.id)).size === value.generationRuns.length
     && isEvaluation(value.evaluation);
 }
 
@@ -405,6 +455,54 @@ export function decodeSongProject(value: unknown): DecodeResult<SongProject> {
     : failure('Invalid canonical v6 SongProject');
 }
 
+function migrateEvaluationToGenerationRuns(
+  revision: Record<string, unknown>,
+): GenerationRun[] | null {
+  if (!isEvaluation(revision.evaluation)
+    || typeof revision.id !== 'string'
+    || !isFiniteNumber(revision.createdAt)
+    || !isGenerationTarget(revision.generationTarget)) {
+    return null;
+  }
+  const evaluation = revision.evaluation;
+  const isEmpty = evaluation.rating === null
+    && evaluation.audioUrl === ''
+    && evaluation.notes === ''
+    && evaluation.evaluatedAt === null;
+  if (isEmpty) return [];
+  return [createDefaultGenerationRun({
+    id: `${revision.id}-legacy-evaluation`,
+    createdAt: evaluation.evaluatedAt ?? revision.createdAt,
+    model: revision.generationTarget.model,
+    workflow: revision.generationTarget.workflow,
+    audioUrl: evaluation.audioUrl,
+    rating: evaluation.rating,
+    notes: evaluation.notes,
+    status: 'succeeded',
+  })];
+}
+
+/** Add generationRuns to a schema-v1 project written before multi-run support. */
+export function migrateLegacyEvaluationProject(value: unknown): DecodeResult<SongProject> {
+  if (!isRecord(value) || value.domainVersion !== CANONICAL_DOMAIN_VERSION || !Array.isArray(value.revisions)) {
+    return failure('Invalid canonical v6 SongProject');
+  }
+  const project = structuredClone(value) as Record<string, unknown>;
+  const revisions: unknown[] = [];
+  for (const candidate of project.revisions as unknown[]) {
+    if (!isRecord(candidate)) return failure('Invalid canonical v6 SongProject');
+    if (Array.isArray(candidate.generationRuns)) {
+      revisions.push(candidate);
+      continue;
+    }
+    const generationRuns = migrateEvaluationToGenerationRuns(candidate);
+    if (generationRuns === null) return failure('Invalid canonical v6 SongProject');
+    revisions.push({ ...candidate, generationRuns });
+  }
+  project.revisions = revisions;
+  return decodeSongProject(project);
+}
+
 export function decodePersistedProjectEnvelope(
   value: unknown,
 ): DecodeResult<PersistedProjectEnvelope> {
@@ -414,7 +512,7 @@ export function decodePersistedProjectEnvelope(
     return failure(`Unsupported persisted project schemaVersion: ${String(value.schemaVersion)}`);
   }
   if (!isFiniteNumber(value.savedAt)) return failure('Persisted project savedAt must be a number');
-  const decodedProject = decodeSongProject(value.project);
+  const decodedProject = migrateLegacyEvaluationProject(value.project);
   if (!decodedProject.ok) return failure(...decodedProject.errors.map((error) => `project: ${error}`));
   return success({
     kind: 'suno-prompt-gen/project',

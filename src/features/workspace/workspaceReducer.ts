@@ -1,4 +1,5 @@
 import type { GenerationModel, GenerationWorkflow } from '../../domain';
+import type { StructuredSection } from './StructuredSectionEditor.helpers';
 
 export interface WorkspaceSourceDraft {
   id: string;
@@ -19,6 +20,7 @@ export interface WorkspaceDraft {
   key: string;
   overallFeel: string;
   structure: string;
+  sections: StructuredSection[];
   lyrics: string;
   avoid: string;
   workflow: GenerationWorkflow;

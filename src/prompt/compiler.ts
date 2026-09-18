@@ -1,4 +1,5 @@
 import type { Revision, SourceReference } from '../domain';
+import { checkPromptQuality } from './quality';
 import type {
   EditDirective,
   GenerationModel,
@@ -204,12 +205,10 @@ function workflowContext(target: PromptCompilerRequest): string {
 
 function collectWarnings(target: GenerationTarget): string[] {
   const warnings: string[] = [];
-  if (!clean(target.song.concept)) warnings.push('Song concept is empty.');
   if (target.workflow === 'explore' && target.model !== 'v6-wild') {
     warnings.push('Explore works with this model, but v6-wild provides the broadest variation strategy.');
   }
   if (target.workflow === 'edit-section' || target.workflow === 'edit-lyrics') {
-    if (!clean(target.edit.scope)) warnings.push('Edit scope is empty.');
     if (!cleanList(target.edit.preserve).length) warnings.push('Edit preserve list is empty.');
     if (!cleanList(target.edit.change).length) warnings.push('Edit change list is empty.');
   }
@@ -218,9 +217,6 @@ function collectWarnings(target: GenerationTarget): string[] {
     target.sources.forEach((source, index) => validateSource(source, `Mashup source ${index + 1}`, warnings));
   }
   if (target.workflow === 'sample') validateSource(target.source, 'Sample source', warnings);
-  if (target.model === 'v6-mini' && cleanList(target.song.structure).length > 6) {
-    warnings.push('v6-mini compresses long structures; use v6 when every section must be controlled precisely.');
-  }
   return warnings;
 }
 
@@ -267,7 +263,10 @@ export function compilePrompt(input: PromptCompilerInput): RenderedPrompt {
     primaryPrompt: strategy.renderPrimary(context, target.song),
     stylePrompt,
     lyricsPrompt,
-    warnings: collectWarnings(target),
+    warnings: [
+      ...collectWarnings(target),
+      ...checkPromptQuality(input).map((qualityIssue) => qualityIssue.message),
+    ],
     sections: buildSections(target, context, stylePrompt, lyricsPrompt),
   };
 }
