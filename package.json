@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Suno v6 prompt generator with natural-language music intent and AI lyrics generation",
+  "description": "Suno v6 creative workspace for create, explore, edit, mashup and sample workflows",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

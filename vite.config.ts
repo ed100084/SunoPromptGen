@@ -22,9 +22,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'Suno Prompt Generator',
-        short_name: 'SunoPrompt',
-        description: 'Suno v6 prompt generator with natural-language music intent',
+        name: 'Suno v6 Creative Workspace',
+        short_name: 'Suno v6',
+        description: 'Create, explore, edit, mash up and sample with structured Suno v6 instructions',
         theme_color: '#4f46e5',
         background_color: '#0f172a',
         display: 'standalone',

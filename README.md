@@ -1,13 +1,22 @@
 # Suno Prompt Generator
 
-中文友善的 Suno AI prompt 產生器 — **支援 Suno v6、22 個情境範本、意圖結構視覺化、歷史比對與評分**。
+中文友善的 **Suno v6 Creative Workspace** — 從創作意圖建立新歌、探索變體、局部改歌詞或編曲，並產生可複製的 Suno 指令。
 PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
+
+> v6-first 重寫版不直接呼叫 Suno；它將 Creative Brief 編譯成可貼入 Suno 的指令。v6 與 v6-wild 依官方說明僅供付費方案使用。
 
 🌐 線上版：<https://ed100084.github.io/SunoPromptGen/>
 
 ---
 
-## Features
+## v6-first 工作流
+
+- **Create** — 從一句話 Brief、整體 Feel、編制、人聲與結構產生完整指令
+- **Explore** — 以 v6-wild 描述探索軸線，保留核心並打開大膽變化
+- **Edit Section / Lyrics** — 明確指定 Scope、Preserve 與 Change，避免重建整首作品
+- **Mashup / Sample** — 為每個來源指定角色與時間範圍，並提示素材權利確認
+- **Project Revisions** — 保存父子版本、模型與工作流，顯示相對上一版的結構化差異
+- **Legacy Migration** — 首次載入時把舊 `suno_history_v1` 歷史安全遷移到版本化 Project envelope
 
 ### 🎼 Prompt 生成
 - **Suno v6 自然語言意圖** — 核心方向 → 演奏與編制 → 人聲意圖 → 製作方向 → 整體 Feel
@@ -16,7 +25,7 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 - **具體排除項目** — 可加入 no autotune / no synths 等真正不希望出現的聲音
 - **整體連貫性** — 一鍵加入自然段落轉場、重複動機與一致聲音識別
 - **Voice Clone 模式** — 啟用後自動略過人聲描述
-- **即時字元 / 意圖數警示** — 目前採 1000 字安全上限、建議 8-18 個具體意圖（官方未公布新的硬上限）
+- **結構化檢查** — 依工作流檢查空白 Brief、缺少 edit scope、來源角色與時間範圍；不再用 tag 數冒充品質指標
 - **22 個情境範本** — 華語抒情、流行燃曲、搖滾爆發、Lo-fi 讀書、古風中國風、Indie 民謠、電影配樂、City Pop、EDM 派對、氛圍環境、K-Pop 偶像舞曲、R&B 慢板、華語嘻哈、Synthwave 80s、House 律動、Bossa Nova 咖啡、Pop Punk 熱血、Funk 派對、Dream Pop 迷幻、Acoustic 純粹、粵語金曲、童趣兒歌
 - **15 種段落結構模板** — 標準流行、抒情骨架、電子流行 Drop、搖滾骨架、簡短版、極簡 V-C、純樂器 Loop、Hip-Hop 結構、K-Pop 舞曲（含 Dance Break）、EDM 完整版（Buildup-Drop）、AABA 32-bar 爵士標準、古風敘事長篇、Funk Vamp、童謠循環、Folk 敘事
 
