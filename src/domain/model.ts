@@ -1,8 +1,9 @@
 import type { DecodeResult } from './runtime';
 import { failure, isFiniteNumber, isRecord, isStringArray, success } from './runtime';
 
-export const CANONICAL_DOMAIN_VERSION = 6 as const;
-export const PERSISTED_PROJECT_SCHEMA_VERSION = 1 as const;
+export const CANONICAL_DOMAIN_VERSION = 7 as const;
+export const PERSISTED_PROJECT_SCHEMA_VERSION = 2 as const;
+export const LEGACY_PERSISTED_PROJECT_SCHEMA_VERSION = 1 as const;
 
 export type CanonicalDomainVersion = typeof CANONICAL_DOMAIN_VERSION;
 export type PersistedProjectSchemaVersion = typeof PERSISTED_PROJECT_SCHEMA_VERSION;
@@ -20,9 +21,13 @@ export interface CreativeBrief {
 }
 
 export interface ArrangementSection {
-  tag: string;
-  description: string;
+  id: string;
+  name: string;
+  role: string;
+  energy: string;
+  instrumentation: string[];
   lyrics: string;
+  locked: boolean;
 }
 
 export interface Arrangement {
@@ -103,10 +108,14 @@ export interface GenerationRun {
   createdAt: number;
   model: GenerationModel;
   workflow: GenerationWorkflow;
+  /** Exact prompt text submitted to the generation provider. */
+  submittedPrompt: string;
   audioUrl: string;
   rating: 1 | 2 | 3 | 4 | 5 | null;
   notes: string;
   status: GenerationRunStatus;
+  /** At most one run per revision may be marked as the best result. */
+  isBest: boolean;
 }
 
 /** Persistence-v1 compatibility shape, migrated into a GenerationRun when non-empty. */
@@ -198,10 +207,12 @@ export const DEFAULT_GENERATION_TARGET: Readonly<GenerationTarget> = Object.free
 export const DEFAULT_GENERATION_RUN: Readonly<Omit<GenerationRun, 'id' | 'createdAt'>> = Object.freeze({
   model: 'v6',
   workflow: 'create',
+  submittedPrompt: '',
   audioUrl: '',
   rating: null,
   notes: '',
   status: 'pending',
+  isBest: false,
 });
 
 function cloneDefaults<T>(value: T): T {
@@ -212,8 +223,27 @@ export function createDefaultCreativeBrief(overrides: Partial<CreativeBrief> = {
   return { ...cloneDefaults(DEFAULT_CREATIVE_BRIEF), ...overrides };
 }
 
+export function createDefaultArrangementSection(
+  overrides: Partial<ArrangementSection> = {},
+): ArrangementSection {
+  return {
+    id: '',
+    name: '',
+    role: '',
+    energy: '',
+    instrumentation: [],
+    lyrics: '',
+    locked: false,
+    ...overrides,
+  };
+}
+
 export function createDefaultArrangement(overrides: Partial<Arrangement> = {}): Arrangement {
-  return { ...cloneDefaults(DEFAULT_ARRANGEMENT), ...overrides };
+  const arrangement = { ...cloneDefaults(DEFAULT_ARRANGEMENT), ...overrides };
+  return {
+    ...arrangement,
+    sections: arrangement.sections.map((section) => createDefaultArrangementSection(section)),
+  };
 }
 
 export function createDefaultVocalIntent(
@@ -320,16 +350,25 @@ export function isCreativeBrief(value: unknown): value is CreativeBrief {
     && typeof value.additionalDirection === 'string';
 }
 
+export function isArrangementSection(value: unknown): value is ArrangementSection {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.name === 'string'
+    && typeof value.role === 'string'
+    && typeof value.energy === 'string'
+    && isStringArray(value.instrumentation)
+    && typeof value.lyrics === 'string'
+    && typeof value.locked === 'boolean';
+}
+
 export function isArrangement(value: unknown): value is Arrangement {
   return isRecord(value)
     && (value.bpm === null || isFiniteNumber(value.bpm))
     && typeof value.key === 'string'
     && typeof value.structureName === 'string'
     && Array.isArray(value.sections)
-    && value.sections.every((section) => isRecord(section)
-      && typeof section.tag === 'string'
-      && typeof section.description === 'string'
-      && typeof section.lyrics === 'string')
+    && value.sections.every(isArrangementSection)
+    && new Set(value.sections.map((section) => section.id)).size === value.sections.length
     && isStringArray(value.instruments)
     && isStringArray(value.textures)
     && typeof value.cohesion === 'boolean';
@@ -400,10 +439,12 @@ export function isGenerationRun(value: unknown): value is GenerationRun {
     && isFiniteNumber(value.createdAt)
     && (value.model === 'v6' || value.model === 'v6-wild' || value.model === 'v6-mini')
     && ['create', 'explore', 'edit-section', 'edit-lyrics', 'mashup', 'sample'].includes(String(value.workflow))
+    && typeof value.submittedPrompt === 'string'
     && typeof value.audioUrl === 'string'
     && (value.rating === null || [1, 2, 3, 4, 5].includes(Number(value.rating)))
     && typeof value.notes === 'string'
-    && ['pending', 'running', 'succeeded', 'failed', 'cancelled'].includes(String(value.status));
+    && ['pending', 'running', 'succeeded', 'failed', 'cancelled'].includes(String(value.status))
+    && typeof value.isBest === 'boolean';
 }
 
 export function isRevision(value: unknown): value is Revision {
@@ -422,6 +463,7 @@ export function isRevision(value: unknown): value is Revision {
     && Array.isArray(value.generationRuns)
     && value.generationRuns.every(isGenerationRun)
     && new Set(value.generationRuns.map((run) => run.id)).size === value.generationRuns.length
+    && value.generationRuns.filter((run) => run.isBest).length <= 1
     && isEvaluation(value.evaluation);
 }
 
@@ -452,7 +494,7 @@ export function isPersistedProjectEnvelope(value: unknown): value is PersistedPr
 export function decodeSongProject(value: unknown): DecodeResult<SongProject> {
   return isSongProject(value)
     ? success(structuredClone(value))
-    : failure('Invalid canonical v6 SongProject');
+    : failure(`Invalid canonical v${CANONICAL_DOMAIN_VERSION} SongProject`);
 }
 
 function migrateEvaluationToGenerationRuns(
@@ -482,23 +524,66 @@ function migrateEvaluationToGenerationRuns(
   })];
 }
 
-/** Add generationRuns to a schema-v1 project written before multi-run support. */
+function migrateGenerationRunFields(value: unknown): GenerationRun | null {
+  if (!isRecord(value)) return null;
+  const candidate = {
+    ...value,
+    submittedPrompt: typeof value.submittedPrompt === 'string' ? value.submittedPrompt : '',
+    isBest: typeof value.isBest === 'boolean' ? value.isBest : false,
+  };
+  return isGenerationRun(candidate) ? candidate : null;
+}
+
+function migrateArrangementSection(
+  value: unknown,
+  revisionId: string,
+  index: number,
+): ArrangementSection | null {
+  if (!isRecord(value) || typeof value.lyrics !== 'string') return null;
+  const legacyName = typeof value.tag === 'string' ? value.tag : '';
+  const legacyRole = typeof value.description === 'string' ? value.description : '';
+  const section = createDefaultArrangementSection({
+    id: typeof value.id === 'string' ? value.id : `${revisionId}-section-${index + 1}`,
+    name: typeof value.name === 'string' ? value.name : legacyName,
+    role: typeof value.role === 'string' ? value.role : legacyRole,
+    energy: typeof value.energy === 'string' ? value.energy : '',
+    instrumentation: isStringArray(value.instrumentation) ? [...value.instrumentation] : [],
+    lyrics: value.lyrics,
+    locked: typeof value.locked === 'boolean' ? value.locked : false,
+  });
+  return isArrangementSection(section) ? section : null;
+}
+
+function migrateRevision(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value) || typeof value.id !== 'string' || !isRecord(value.arrangement)
+    || !Array.isArray(value.arrangement.sections)) return null;
+  const sections = value.arrangement.sections.map((section, index) =>
+    migrateArrangementSection(section, value.id as string, index));
+  if (sections.some((section) => section === null)) return null;
+  const generationRuns = Array.isArray(value.generationRuns)
+    ? value.generationRuns.map(migrateGenerationRunFields)
+    : migrateEvaluationToGenerationRuns(value);
+  if (generationRuns === null || generationRuns.some((run) => run === null)) return null;
+  return {
+    ...value,
+    arrangement: { ...value.arrangement, sections },
+    generationRuns,
+  };
+}
+
+/** Upgrade canonical projects written by earlier domain/persistence clients. */
 export function migrateLegacyEvaluationProject(value: unknown): DecodeResult<SongProject> {
-  if (!isRecord(value) || value.domainVersion !== CANONICAL_DOMAIN_VERSION || !Array.isArray(value.revisions)) {
-    return failure('Invalid canonical v6 SongProject');
+  if (!isRecord(value)
+    || (value.domainVersion !== 6 && value.domainVersion !== CANONICAL_DOMAIN_VERSION)
+    || !Array.isArray(value.revisions)) {
+    return failure(`Invalid canonical v${CANONICAL_DOMAIN_VERSION} SongProject`);
   }
   const project = structuredClone(value) as Record<string, unknown>;
-  const revisions: unknown[] = [];
-  for (const candidate of project.revisions as unknown[]) {
-    if (!isRecord(candidate)) return failure('Invalid canonical v6 SongProject');
-    if (Array.isArray(candidate.generationRuns)) {
-      revisions.push(candidate);
-      continue;
-    }
-    const generationRuns = migrateEvaluationToGenerationRuns(candidate);
-    if (generationRuns === null) return failure('Invalid canonical v6 SongProject');
-    revisions.push({ ...candidate, generationRuns });
+  const revisions = (project.revisions as unknown[]).map(migrateRevision);
+  if (revisions.some((revision) => revision === null)) {
+    return failure(`Invalid canonical v${CANONICAL_DOMAIN_VERSION} SongProject`);
   }
+  project.domainVersion = CANONICAL_DOMAIN_VERSION;
   project.revisions = revisions;
   return decodeSongProject(project);
 }
@@ -508,7 +593,8 @@ export function decodePersistedProjectEnvelope(
 ): DecodeResult<PersistedProjectEnvelope> {
   if (!isRecord(value)) return failure('Persisted project envelope must be an object');
   if (value.kind !== 'suno-prompt-gen/project') return failure('Unsupported persisted project kind');
-  if (value.schemaVersion !== PERSISTED_PROJECT_SCHEMA_VERSION) {
+  if (value.schemaVersion !== LEGACY_PERSISTED_PROJECT_SCHEMA_VERSION
+    && value.schemaVersion !== PERSISTED_PROJECT_SCHEMA_VERSION) {
     return failure(`Unsupported persisted project schemaVersion: ${String(value.schemaVersion)}`);
   }
   if (!isFiniteNumber(value.savedAt)) return failure('Persisted project savedAt must be a number');

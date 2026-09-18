@@ -89,7 +89,10 @@ describe('project revision operations', () => {
     const project = createDefaultSongProject({ id: 'p', revisionId: 'r1', now: 1 });
     const before = project.revisions[0];
     const after = structuredClone(before);
-    after.arrangement.sections = [{ tag: 'Verse', description: '', lyrics: '' }, { tag: 'Chorus', description: '', lyrics: '' }];
+    after.arrangement.sections = [
+      { id: 'verse', name: 'Verse', role: '', energy: '', instrumentation: [], lyrics: '', locked: false },
+      { id: 'chorus', name: 'Chorus', role: '', energy: '', instrumentation: [], lyrics: '', locked: false },
+    ];
     after.vocalIntent = { mode: 'instrumental' };
     after.constraints.change = ['鼓組', '速度'];
 

@@ -71,7 +71,15 @@ describe('canonical domain adapter', () => {
         bpm: 96,
         key: 'D major',
         instruments: ['piano'],
-        sections: [{ tag: 'Chorus', description: '', lyrics: '天亮以後繼續走' }],
+        sections: [{
+          id: 'chorus-1',
+          name: 'Chorus',
+          role: '情感高峰',
+          energy: 'high',
+          instrumentation: ['piano', 'strings'],
+          lyrics: '天亮以後繼續走',
+          locked: true,
+        }],
       },
       vocalIntent: { mode: 'vocal', descriptors: ['intimate alto'], useVoiceClone: false },
       constraints: { avoid: ['harsh distortion'] },
@@ -88,6 +96,7 @@ describe('canonical domain adapter', () => {
     });
     expect(result.primaryPrompt).toContain('雨後重新出發');
     expect(result.primaryPrompt).toContain('Exploration axis: three arrangements');
+    expect(result.primaryPrompt).toContain('Section: Chorus; role=情感高峰; energy=high; instrumentation=piano, strings; locked=true');
     expect(result.stylePrompt).toContain('intimate alto');
   });
 

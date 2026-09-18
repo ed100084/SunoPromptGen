@@ -39,6 +39,7 @@ const songFacts = (song: PromptSong): string[] =>
     clean(song.tempo) ? `Tempo: ${clean(song.tempo)}` : undefined,
     clean(song.key) ? `Key: ${clean(song.key)}` : undefined,
     sentence('Structure', song.structure),
+    ...(song.sectionDirections ?? []).map((direction) => `Section: ${direction}`),
     sentence('Avoid', song.avoid),
     clean(song.notes) ? `Additional direction: ${clean(song.notes)}` : undefined,
   ].filter((line): line is string => Boolean(line));
@@ -143,7 +144,14 @@ function targetFromRevision(revision: Revision): PromptCompilerRequest {
     vocals: revision.vocalIntent.mode === 'vocal' ? revision.vocalIntent.descriptors : [],
     tempo: revision.arrangement.bpm === null ? undefined : `${revision.arrangement.bpm} BPM`,
     key: revision.arrangement.key,
-    structure: revision.arrangement.sections.map((section) => section.tag),
+    structure: revision.arrangement.sections.map((section) => section.name),
+    sectionDirections: revision.arrangement.sections.map((section) => [
+      section.name,
+      section.role && `role=${section.role}`,
+      section.energy && `energy=${section.energy}`,
+      section.instrumentation.length && `instrumentation=${section.instrumentation.join(', ')}`,
+      section.locked && 'locked=true',
+    ].filter(Boolean).join('; ')),
     lyrics: revision.arrangement.sections.map((section) => section.lyrics).filter(Boolean).join('\n\n'),
     avoid: revision.constraints.avoid,
     notes: revision.brief.additionalDirection || revision.constraints.notes,

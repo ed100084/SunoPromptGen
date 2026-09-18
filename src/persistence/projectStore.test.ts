@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDefaultSongProject, createPersistedProjectEnvelope } from '../domain';
+import {
+  PERSISTED_PROJECT_SCHEMA_VERSION,
+  createDefaultSongProject,
+  createPersistedProjectEnvelope,
+} from '../domain';
 import type { HistoryEntry, SongState } from '../types';
 import {
   LEGACY_HISTORY_KEY,
@@ -73,7 +77,7 @@ describe('projectStore localStorage fallback', () => {
 
     expect(await repository.import(JSON.stringify(envelope))).toEqual([project, existing]);
     const exported = await repository.export();
-    expect(exported).toContain('"schemaVersion": 1');
+    expect(exported).toContain(`"schemaVersion": ${PERSISTED_PROJECT_SCHEMA_VERSION}`);
     expect(exported).toContain('"kind": "suno-prompt-gen/project"');
 
     await expect(repository.import(JSON.stringify([{ ...envelope, schemaVersion: 999 }]))).rejects
@@ -91,7 +95,7 @@ describe('projectStore localStorage fallback', () => {
     await expect(repository.import(JSON.stringify([
       createPersistedProjectEnvelope(incoming, 30),
       { kind: 'suno-prompt-gen/project', schemaVersion: 1, savedAt: 31, project: {} },
-    ]))).rejects.toThrow('project: Invalid canonical v6 SongProject');
+    ]))).rejects.toThrow('project: Invalid canonical v7 SongProject');
 
     expect(await repository.list()).toEqual([existing]);
   });
@@ -106,7 +110,7 @@ describe('projectStore localStorage fallback', () => {
     await expect(repository.import(JSON.stringify({ ...envelope, kind: 'other' }))).rejects
       .toThrow('Unsupported persisted project kind');
     await expect(repository.import(JSON.stringify(brokenActive))).rejects
-      .toThrow('project: Invalid canonical v6 SongProject');
+      .toThrow('project: Invalid canonical v7 SongProject');
     expect(await repository.import('[]')).toEqual([]);
     expect(await repository.list()).toEqual([]);
   });

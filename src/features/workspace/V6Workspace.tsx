@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useReducer, useState } from 'react';
 import { useTheme } from '../../hooks/useTheme';
 import {
   analyzeCanonicalInsights,
   appendGenerationRun,
   appendRevision,
   createDefaultGenerationRun,
+  deleteGenerationRun,
+  markBestGenerationRun,
+  setGenerationRunStatus,
+  updateGenerationRun,
   compareRevisions,
   createDefaultSongProject,
   deleteRevision,
@@ -21,15 +25,20 @@ import {
   loadProjects,
   saveProjects,
 } from '../../persistence/projectStore';
-import { LyricsAnalyzer } from '../../components/LyricsAnalyzer';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { ModelStrategyPicker } from './ModelStrategyPicker';
 import { ProjectSidebar } from './ProjectSidebar';
 import { PromptPreview } from './PromptPreview';
 import { WorkflowPicker, WORKFLOWS } from './WorkflowPicker';
-import { LyricsAiPanel } from './LyricsAiPanel';
 import { workspaceReducer, type WorkspaceDraft } from './workspaceReducer';
 import { StructuredSectionEditor, type StructuredSection } from './StructuredSectionEditor';
+import { GenerationRunsPanel } from './GenerationRunsPanel';
+import type { GenerationRunDraft } from './GenerationRunsPanel.helpers';
+import { PresetPicker } from '../../components/PresetPicker';
+import { applyV6Preset, type V6Preset, type V6PresetId } from '../../presets';
+
+const LyricsAnalyzer = lazy(() => import('../../components/LyricsAnalyzer').then((module) => ({ default: module.LyricsAnalyzer })));
+const LyricsAiPanel = lazy(() => import('./LyricsAiPanel').then((module) => ({ default: module.LyricsAiPanel })));
 
 type Draft = WorkspaceDraft;
 
@@ -125,13 +134,13 @@ function draftFromRevision(revision: Revision): Draft {
     tempo: revision.arrangement.bpm ? `${revision.arrangement.bpm} BPM` : '',
     key: revision.arrangement.key,
     overallFeel: revision.brief.additionalDirection,
-    structure: csv(revision.arrangement.sections.map((section) => section.tag)),
+    structure: csv(revision.arrangement.sections.map((section) => section.name)),
     sections: revision.arrangement.sections.map((section, index) => ({
       id: `${revision.id}-section-${index}`,
-      name: section.tag,
-      role: section.description,
-      energy: '',
-      instrumentation: '',
+      name: section.name,
+      role: section.role,
+      energy: section.energy,
+      instrumentation: section.instrumentation.join(', '),
       lyrics: section.lyrics,
       locked: false,
     })),
@@ -178,9 +187,13 @@ function revisionFromDraft(draft: Draft, parentRevisionId: string | null): Revis
       key: draft.key,
       structureName: 'Custom v6 plan',
       sections: draft.sections.map((section) => ({
-        tag: section.name,
-        description: [section.role, section.energy && `Energy: ${section.energy}`, section.instrumentation && `Instrumentation: ${section.instrumentation}`].filter(Boolean).join(' · '),
+        id: section.id,
+        name: section.name,
+        role: section.role,
+        energy: section.energy,
+        instrumentation: list(section.instrumentation),
         lyrics: section.lyrics,
+        locked: section.locked,
       })),
       instruments: list(draft.instruments),
       textures: [],
@@ -245,6 +258,7 @@ export function V6Workspace() {
   const [copied, setCopied] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(DEFAULT_DRAFT));
+  const [selectedPresetId, setSelectedPresetId] = useState<V6PresetId | null>(null);
   const isDirty = JSON.stringify(draft) !== savedSnapshot;
   const rendered = useMemo(() => compilePrompt(toCompilerTarget({
     ...draft,
@@ -376,6 +390,45 @@ export function V6Workspace() {
       .catch((error) => setStatusMessage(`評分儲存失敗：${(error as Error).message}`));
   };
 
+  const updateActiveRevision = (transform: (revision: Revision) => Revision, successMessage: string) => {
+    if (!activeProject || !activeRevision) return;
+    const now = Date.now();
+    const next = projects.map((project) => project.id === activeProject.id ? {
+      ...project,
+      updatedAt: now,
+      revisions: project.revisions.map((revision) => revision.id === activeRevision.id ? transform(revision) : revision),
+    } : project);
+    setProjects(next);
+    void saveProjects(next).then(() => setStatusMessage(successMessage))
+      .catch((error) => setStatusMessage(`Generation Run 儲存失敗：${(error as Error).message}`));
+  };
+
+  const applyPresetToDraft = (preset: V6Preset) => {
+    const base = revisionFromDraft(draft, null);
+    const applied = applyV6Preset({
+      brief: base.brief,
+      arrangement: base.arrangement,
+      vocalIntent: base.vocalIntent,
+      constraints: base.constraints,
+      generationTarget: base.generationTarget,
+    }, preset);
+    dispatch({ type: 'replace', draft: draftFromRevision({ ...base, ...applied }) });
+    setSelectedPresetId(preset.id);
+    setStatusMessage(`已套用「${preset.name}」；請按需要微調後儲存 Revision。`);
+  };
+
+  const addRun = (runDraft: GenerationRunDraft) => {
+    if (!activeRevision) return;
+    const now = Date.now();
+    updateActiveRevision((revision) => appendGenerationRun(revision, createDefaultGenerationRun({
+      ...runDraft,
+      id: `run-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: now,
+      model: revision.generationTarget.model,
+      workflow: revision.generationTarget.workflow,
+    })), '已新增 Generation Run。');
+  };
+
   const copyPrompt = async () => {
     if (!sourceRightsConfirmed()) return;
     await navigator.clipboard.writeText(rendered.primaryPrompt);
@@ -437,6 +490,7 @@ export function V6Workspace() {
 
     <main className="mx-auto max-w-[1500px] px-4 py-6 lg:px-8">
       <WorkflowPicker value={draft.workflow} onChange={(value) => set('workflow', value)} />
+      <PresetPicker value={selectedPresetId} onSelect={applyPresetToDraft} className="mb-5" />
 
       <div className="grid gap-5 xl:grid-cols-[250px_minmax(0,1fr)_minmax(360px,0.85fr)]">
         <div className="space-y-4">
@@ -470,8 +524,8 @@ export function V6Workspace() {
           {(draft.workflow === 'edit-section' || draft.workflow === 'edit-lyrics') && <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5 dark:border-sky-900 dark:bg-sky-950/20"><h2 className="mb-4 font-bold">局部編修契約</h2><div className="space-y-4"><Field label="Scope"><input className={inputClass} value={draft.scope} onChange={(e) => set('scope', e.target.value)} /></Field><Field label="Preserve"><textarea className={inputClass} rows={2} value={draft.preserve} onChange={(e) => set('preserve', e.target.value)} /></Field><Field label="Change"><textarea className={inputClass} rows={2} value={draft.change} onChange={(e) => set('change', e.target.value)} /></Field></div></div>}
           {(draft.workflow === 'mashup' || draft.workflow === 'sample') && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/20"><div className="mb-4 flex items-center justify-between"><h2 className="font-bold">來源與角色</h2>{draft.workflow === 'mashup' && <button onClick={addSource} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white">＋ 新增來源</button>}</div><div className="space-y-3">{draft.sources.slice(0, draft.workflow === 'sample' ? 1 : undefined).map((source, index) => <div key={source.id} className="grid gap-3 rounded-xl border border-amber-200 bg-white/60 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] dark:border-amber-900 dark:bg-slate-900/40"><input className={inputClass} placeholder={`Source ${index + 1} 名稱`} value={source.name} onChange={(e) => updateSource(source.id, 'name', e.target.value)} /><input className={inputClass} placeholder="角色，例如 drums" value={source.role} onChange={(e) => updateSource(source.id, 'role', e.target.value)} /><input className={inputClass} placeholder="00:12-00:28" value={source.range} onChange={(e) => updateSource(source.id, 'range', e.target.value)} />{draft.workflow === 'mashup' && draft.sources.length > 2 && <button onClick={() => removeSource(source.id)} className="px-2 text-rose-600" aria-label={`移除來源 ${index + 1}`}>✕</button>}</div>)}</div><label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.rightsConfirmed} onChange={(e) => set('rightsConfirmed', e.target.checked)} />我確認擁有或獲准使用這些來源素材</label></div>}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">04 · Lyrics</p><h2 className="mb-4 mt-1 text-xl font-bold">歌詞與局部精修</h2><textarea className={inputClass} rows={12} value={draft.lyrics} onChange={(e) => set('lyrics', e.target.value)} placeholder="可貼入既有歌詞，或留空只生成音樂方向…" />{draft.lyrics.trim() && <div className="mt-4"><LyricsAnalyzer lyrics={draft.lyrics} tag="Full Lyrics" /></div>}</div>
-          <LyricsAiPanel
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wider text-violet-600">04 · Lyrics</p><h2 className="mb-4 mt-1 text-xl font-bold">歌詞與局部精修</h2><textarea className={inputClass} rows={12} value={draft.lyrics} onChange={(e) => set('lyrics', e.target.value)} placeholder="可貼入既有歌詞，或留空只生成音樂方向…" />{draft.lyrics.trim() && <div className="mt-4"><Suspense fallback={<p className="text-xs text-slate-500">載入歌詞分析…</p>}><LyricsAnalyzer lyrics={draft.lyrics} tag="Full Lyrics" /></Suspense></div>}</div>
+          <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">載入 AI 歌詞工具…</div>}><LyricsAiPanel
             lyrics={draft.lyrics}
             onApply={(lyrics) => set('lyrics', lyrics)}
             defaultTask={draft.workflow === 'edit-lyrics' ? 'edit-lyrics' : 'generate'}
@@ -487,9 +541,10 @@ export function V6Workspace() {
               editScope: draft.scope,
               preserve: draft.preserve,
             }}
-          />
+          /></Suspense>
         </section>
 
+        <div className="space-y-5">
         <PromptPreview
           rendered={rendered}
           workflow={workflow}
@@ -501,6 +556,16 @@ export function V6Workspace() {
           onSaveRevision={saveRevision}
           onExportProject={exportProject}
         />
+        {activeRevision && <GenerationRunsPanel
+          revision={activeRevision}
+          onAdd={addRun}
+          onUpdate={(runId, update) => updateActiveRevision((revision) => updateGenerationRun(revision, runId, update), 'Generation Run 已更新。')}
+          onDelete={(runId) => updateActiveRevision((revision) => deleteGenerationRun(revision, runId), 'Generation Run 已刪除。')}
+          onStatusChange={(runId, status) => updateActiveRevision((revision) => setGenerationRunStatus(revision, runId, status), 'Generation Run 狀態已更新。')}
+          onMarkBest={(runId) => updateActiveRevision((revision) => markBestGenerationRun(revision, runId), '最佳 Generation Run 已更新。')}
+          confirmDelete={() => window.confirm('刪除這筆 Generation Run？')}
+        />}
+        </div>
       </div>
     </main>
   </div>;

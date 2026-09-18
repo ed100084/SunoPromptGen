@@ -18,6 +18,7 @@ export interface PromptSong {
   tempo?: string;
   key?: string;
   structure?: string[];
+  sectionDirections?: string[];
   lyrics?: string;
   avoid?: string[];
   notes?: string;

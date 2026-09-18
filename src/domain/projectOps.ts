@@ -1,4 +1,10 @@
-import { isGenerationRun, type GenerationRun, type Revision, type SongProject } from './model';
+import {
+  isGenerationRun,
+  type GenerationRun,
+  type GenerationRunStatus,
+  type Revision,
+  type SongProject,
+} from './model';
 
 export interface StructuredChange {
   field: string;
@@ -51,7 +57,10 @@ export function appendGenerationRun(revision: Revision, run: GenerationRun): Rev
   if ((revision.generationRuns ?? []).some((item) => item.id === run.id)) {
     throw new Error(`Generation run already exists: ${run.id}`);
   }
-  return updateRevisionRuns(revision, (runs) => [...runs, run]);
+  return updateRevisionRuns(revision, (runs) => [
+    ...runs.map((item) => run.isBest ? { ...item, isBest: false } : item),
+    run,
+  ]);
 }
 
 export function updateGenerationRun(
@@ -63,7 +72,10 @@ export function updateGenerationRun(
   if (!current) throw new Error(`Generation run does not exist: ${runId}`);
   const next = { ...current, ...structuredClone(update) };
   if (!isGenerationRun(next)) throw new Error('Invalid generation run update');
-  return updateRevisionRuns(revision, (runs) => runs.map((run) => run.id === runId ? next : run));
+  return updateRevisionRuns(revision, (runs) => runs.map((run) => {
+    if (run.id === runId) return next;
+    return next.isBest ? { ...run, isBest: false } : run;
+  }));
 }
 
 export function deleteGenerationRun(revision: Revision, runId: string): Revision {
@@ -71,6 +83,42 @@ export function deleteGenerationRun(revision: Revision, runId: string): Revision
     throw new Error(`Generation run does not exist: ${runId}`);
   }
   return updateRevisionRuns(revision, (runs) => runs.filter((run) => run.id !== runId));
+}
+
+export function setGenerationRunStatus(
+  revision: Revision,
+  runId: string,
+  status: GenerationRunStatus,
+): Revision {
+  return updateGenerationRun(revision, runId, { status });
+}
+
+export function markBestGenerationRun(revision: Revision, runId: string | null): Revision {
+  if (runId !== null && !(revision.generationRuns ?? []).some((run) => run.id === runId)) {
+    throw new Error(`Generation run does not exist: ${runId}`);
+  }
+  return updateRevisionRuns(revision, (runs) => runs.map((run) => ({
+    ...run,
+    isBest: runId !== null && run.id === runId,
+  })));
+}
+
+export interface GenerationRunComparison {
+  left: GenerationRun;
+  right: GenerationRun;
+}
+
+export function compareGenerationRuns(
+  revision: Revision,
+  leftRunId: string,
+  rightRunId: string,
+): GenerationRunComparison {
+  if (leftRunId === rightRunId) throw new Error('Select two different generation runs');
+  const left = (revision.generationRuns ?? []).find((run) => run.id === leftRunId);
+  const right = (revision.generationRuns ?? []).find((run) => run.id === rightRunId);
+  if (!left) throw new Error(`Generation run does not exist: ${leftRunId}`);
+  if (!right) throw new Error(`Generation run does not exist: ${rightRunId}`);
+  return { left: structuredClone(left), right: structuredClone(right) };
 }
 
 export function deleteRevision(project: SongProject, revisionId: string): SongProject {
@@ -107,7 +155,7 @@ export function compareRevisions(before: Revision, after: Revision): StructuredC
       before.vocalIntent.mode === 'vocal' ? before.vocalIntent.descriptors : ['純樂器'],
       after.vocalIntent.mode === 'vocal' ? after.vocalIntent.descriptors : ['純樂器'],
     ],
-    ['結構', before.arrangement.sections.map((section) => section.tag), after.arrangement.sections.map((section) => section.tag)],
+    ['結構', before.arrangement.sections.map((section) => section.name), after.arrangement.sections.map((section) => section.name)],
     ['保留', before.constraints.preserve, after.constraints.preserve],
     ['修改', before.constraints.change, after.constraints.change],
     ['排除', before.constraints.avoid, after.constraints.avoid],

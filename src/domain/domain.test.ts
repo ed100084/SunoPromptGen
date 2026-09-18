@@ -109,6 +109,77 @@ describe('versioned persistence decoder', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('將 schema v1 / canonical v6 section 遷移為完整 canonical section 且保留欄位', () => {
+    const legacy = createPersistedProjectEnvelope(
+      createDefaultSongProject({ id: 'p', revisionId: 'r', now: 10 }),
+      20,
+    ) as unknown as Record<string, unknown> & {
+      project: Record<string, unknown> & { revisions: Array<Record<string, unknown>> };
+    };
+    legacy.schemaVersion = 1;
+    legacy.project.domainVersion = 6;
+    legacy.project.revisions[0].arrangement = {
+      bpm: 120,
+      key: 'A minor',
+      structureName: 'custom',
+      instruments: ['drums'],
+      textures: ['gritty'],
+      cohesion: false,
+      sections: [{ tag: 'Verse', description: '敘事推進', lyrics: '舊歌詞', extra: 'preserved nowhere' }],
+    };
+
+    const decoded = decodePersistedProjectEnvelope(legacy);
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.value.schemaVersion).toBe(PERSISTED_PROJECT_SCHEMA_VERSION);
+    expect(decoded.value.project.domainVersion).toBe(CANONICAL_DOMAIN_VERSION);
+    expect(decoded.value.project.revisions[0].arrangement).toMatchObject({
+      bpm: 120,
+      key: 'A minor',
+      structureName: 'custom',
+      instruments: ['drums'],
+      textures: ['gritty'],
+      cohesion: false,
+      sections: [{
+        id: 'r-section-1',
+        name: 'Verse',
+        role: '敘事推進',
+        energy: '',
+        instrumentation: [],
+        lyrics: '舊歌詞',
+        locked: false,
+      }],
+    });
+  });
+
+  it('讀取現行 persistence 時完整保留 section 欄位', () => {
+    const project = createDefaultSongProject({
+      id: 'p',
+      revisionId: 'r',
+      now: 10,
+      arrangement: {
+        sections: [{
+          id: 'bridge-1',
+          name: 'Bridge',
+          role: '轉折',
+          energy: 'rising',
+          instrumentation: ['tom drums', 'strings'],
+          lyrics: '完整保留',
+          locked: true,
+        }],
+      },
+    });
+
+    const decoded = decodePersistedProjectEnvelope(createPersistedProjectEnvelope(project, 20));
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.value.project.revisions[0].arrangement.sections).toEqual(
+      project.revisions[0].arrangement.sections,
+    );
+  });
+
   it('安全處理 invalid JSON', () => {
     const result = parsePersistedProjectEnvelope('{bad json');
     expect(result.ok).toBe(false);
@@ -146,7 +217,15 @@ describe('legacy migration', () => {
       bpm: 88,
       key: 'C minor',
       instruments: ['鋼琴', '弦樂'],
-      sections: [{ tag: 'Verse', description: '低聲開場', lyrics: '列車慢慢離站' }],
+      sections: [{
+        id: 'r-section-1',
+        name: 'Verse',
+        role: '低聲開場',
+        energy: '',
+        instrumentation: [],
+        lyrics: '列車慢慢離站',
+        locked: false,
+      }],
     });
     expect(revision.vocalIntent).toEqual({
       mode: 'vocal',

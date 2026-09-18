@@ -5,9 +5,12 @@ import {
   createDefaultSongProject,
   createPersistedProjectEnvelope,
   decodePersistedProjectEnvelope,
+  compareGenerationRuns,
   deleteGenerationRun,
   isGenerationRun,
   isSongProject,
+  markBestGenerationRun,
+  setGenerationRunStatus,
   updateGenerationRun,
 } from './index';
 
@@ -20,10 +23,12 @@ describe('GenerationRun canonical domain', () => {
       createdAt: 10,
       model: 'v6',
       workflow: 'create',
+      submittedPrompt: '',
       audioUrl: '',
       rating: null,
       notes: '',
       status: 'pending',
+      isBest: false,
     });
     expect(isGenerationRun(run)).toBe(true);
     expect(isGenerationRun({ ...run, status: 'unknown' })).toBe(false);
@@ -49,16 +54,34 @@ describe('GenerationRun pure operations', () => {
     const run = createDefaultGenerationRun({ id: 'run', createdAt: 2 });
     const appended = appendGenerationRun(original, run);
     const updated = updateGenerationRun(appended, 'run', {
-      status: 'succeeded', audioUrl: 'https://example.com/audio.mp3', rating: 4, notes: 'good',
+      submittedPrompt: 'actual prompt', status: 'succeeded', audioUrl: 'https://example.com/audio.mp3', rating: 4, notes: 'good',
     });
     const removed = deleteGenerationRun(updated, 'run');
 
     expect(original.generationRuns).toEqual([]);
     expect(appended.generationRuns?.[0]).not.toBe(run);
-    expect(updated.generationRuns?.[0]).toMatchObject({ status: 'succeeded', rating: 4 });
+    expect(updated.generationRuns?.[0]).toMatchObject({ submittedPrompt: 'actual prompt', status: 'succeeded', rating: 4 });
     expect(removed.generationRuns).toEqual([]);
     expect(() => appendGenerationRun(appended, run)).toThrow('already exists');
     expect(() => updateGenerationRun(original, 'missing', { notes: 'x' })).toThrow('does not exist');
+  });
+
+  it('切換狀態、唯一最佳結果與兩筆 A/B 比較', () => {
+    const original = createDefaultSongProject({ revisionId: 'r', now: 1 }).revisions[0];
+    const withA = appendGenerationRun(original, createDefaultGenerationRun({ id: 'a', createdAt: 2, submittedPrompt: 'A' }));
+    const withBoth = appendGenerationRun(withA, createDefaultGenerationRun({ id: 'b', createdAt: 3, submittedPrompt: 'B', isBest: true }));
+    const bestA = markBestGenerationRun(withBoth, 'a');
+    const runningA = setGenerationRunStatus(bestA, 'a', 'running');
+    const comparison = compareGenerationRuns(runningA, 'a', 'b');
+
+    expect(runningA.generationRuns.map((run) => [run.id, run.isBest, run.status])).toEqual([
+      ['a', true, 'running'],
+      ['b', false, 'pending'],
+    ]);
+    expect(comparison.left.submittedPrompt).toBe('A');
+    expect(comparison.right.submittedPrompt).toBe('B');
+    expect(comparison.left).not.toBe(runningA.generationRuns[0]);
+    expect(() => compareGenerationRuns(runningA, 'a', 'a')).toThrow('different');
   });
 });
 
@@ -86,11 +109,32 @@ describe('legacy evaluation persistence migration', () => {
       createdAt: 20,
       model: 'v6',
       workflow: 'create',
+      submittedPrompt: '',
       audioUrl: 'https://example.com/legacy.mp3',
       rating: 5,
       notes: 'legacy note',
       status: 'succeeded',
+      isBest: false,
     }]);
+  });
+
+  it('補齊舊 generation run 新欄位且不突變輸入', () => {
+    const envelope = createPersistedProjectEnvelope(
+      createDefaultSongProject({ id: 'p', revisionId: 'r', now: 10 }),
+      30,
+    ) as unknown as { project: { revisions: Array<{ generationRuns: Array<Record<string, unknown>> }> } };
+    const legacyRun = createDefaultGenerationRun({ id: 'old-run', createdAt: 11 });
+    delete (legacyRun as unknown as Record<string, unknown>).submittedPrompt;
+    delete (legacyRun as unknown as Record<string, unknown>).isBest;
+    envelope.project.revisions[0].generationRuns = [legacyRun as unknown as Record<string, unknown>];
+    const input = structuredClone(envelope);
+
+    const decoded = decodePersistedProjectEnvelope(input);
+
+    expect(decoded.ok && decoded.value.project.revisions[0].generationRuns[0]).toMatchObject({
+      id: 'old-run', submittedPrompt: '', isBest: false,
+    });
+    expect('submittedPrompt' in input.project.revisions[0].generationRuns[0]).toBe(false);
   });
 
   it('空白 legacy evaluation 遷移為空陣列且不突變輸入', () => {

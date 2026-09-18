@@ -133,10 +133,14 @@ export function migrateLegacySongState(
       bpm: parseLegacyBpm(state.bpm),
       key: state.musicKey,
       structureName: state.structureName,
-      sections: state.sections.map((section) => ({
-        tag: section.tag,
-        description: section.desc,
+      sections: state.sections.map((section, index) => ({
+        id: `${revisionId}-section-${index + 1}`,
+        name: section.tag,
+        role: section.desc,
+        energy: '',
+        instrumentation: [],
         lyrics: section.lyrics,
+        locked: false,
       })),
       instruments: [...state.instruments],
       textures: [...state.textures],
