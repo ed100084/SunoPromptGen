@@ -64,19 +64,65 @@ describe('projectStore localStorage fallback', () => {
     expect(localStorage.getItem(LEGACY_HISTORY_KEY)).toContain('Legacy song');
   });
 
-  it('import/export 接受單一或陣列 envelope 並執行 runtime validation', async () => {
+  it('import/export 接受單一或陣列 envelope、合併既有專案並執行 runtime validation', async () => {
     const repository = localRepository();
+    const existing = createDefaultSongProject({ id: 'existing', revisionId: 'r0', now: 5 });
+    await repository.save(existing);
     const project = createDefaultSongProject({ id: 'p1', revisionId: 'r1', now: 10 });
     const envelope = createPersistedProjectEnvelope(project, 20);
 
-    expect(await repository.import(JSON.stringify(envelope))).toEqual([project]);
+    expect(await repository.import(JSON.stringify(envelope))).toEqual([project, existing]);
     const exported = await repository.export();
     expect(exported).toContain('"schemaVersion": 1');
     expect(exported).toContain('"kind": "suno-prompt-gen/project"');
 
     await expect(repository.import(JSON.stringify([{ ...envelope, schemaVersion: 999 }]))).rejects
       .toThrow('Unsupported persisted project schemaVersion');
-    expect(await repository.list()).toEqual([project]);
+    expect(await repository.list()).toEqual([project, existing]);
+  });
+
+  it('匯入無效 JSON 或混合無效陣列時不覆蓋既有專案', async () => {
+    const repository = localRepository();
+    const existing = createDefaultSongProject({ id: 'existing', revisionId: 'r1', now: 10 });
+    const incoming = createDefaultSongProject({ id: 'incoming', revisionId: 'r2', now: 20 });
+    await repository.save(existing);
+
+    await expect(repository.import('{bad json')).rejects.toThrow(/^Invalid project JSON:/);
+    await expect(repository.import(JSON.stringify([
+      createPersistedProjectEnvelope(incoming, 30),
+      { kind: 'suno-prompt-gen/project', schemaVersion: 1, savedAt: 31, project: {} },
+    ]))).rejects.toThrow('project: Invalid canonical v6 SongProject');
+
+    expect(await repository.list()).toEqual([existing]);
+  });
+
+  it('拒絕錯誤 kind、空陣列及破壞 revision 關聯的 envelope', async () => {
+    const repository = localRepository();
+    const project = createDefaultSongProject({ id: 'p1', revisionId: 'r1', now: 10 });
+    const envelope = createPersistedProjectEnvelope(project, 20);
+    const brokenActive = structuredClone(envelope);
+    brokenActive.project.activeRevisionId = 'missing';
+
+    await expect(repository.import(JSON.stringify({ ...envelope, kind: 'other' }))).rejects
+      .toThrow('Unsupported persisted project kind');
+    await expect(repository.import(JSON.stringify(brokenActive))).rejects
+      .toThrow('project: Invalid canonical v6 SongProject');
+    expect(await repository.import('[]')).toEqual([]);
+    expect(await repository.list()).toEqual([]);
+  });
+
+  it('export 指定專案時不受 repository 內容影響且可 round-trip', async () => {
+    const repository = localRepository();
+    const stored = createDefaultSongProject({ id: 'stored', revisionId: 'r1', now: 10 });
+    const selected = createDefaultSongProject({ id: 'selected', revisionId: 'r2', now: 20 });
+    await repository.save(stored);
+
+    const json = await repository.export([selected]);
+    const parsed = JSON.parse(json) as Array<{ project: { id: string } }>;
+
+    expect(parsed.map((item) => item.project.id)).toEqual(['selected']);
+    expect((await repository.import(json)).map((project) => project.id)).toEqual(['selected', 'stored']);
+    expect((await repository.list()).map((project) => project.id)).toEqual(['selected', 'stored']);
   });
 });
 

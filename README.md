@@ -15,7 +15,9 @@ PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 - **Explore** — 以 v6-wild 描述探索軸線，保留核心並打開大膽變化
 - **Edit Section / Lyrics** — 明確指定 Scope、Preserve 與 Change，避免重建整首作品
 - **Mashup / Sample** — 為每個來源指定角色與時間範圍，並提示素材權利確認
-- **Project Revisions** — 保存父子版本、模型與工作流，顯示相對上一版的結構化差異
+- **Project Revisions** — 保存父子版本、模型與工作流，可從任意舊版建立分支、評分、刪除 leaf revision，並顯示結構化差異
+- **備份與還原** — 版本化 Project envelope 匯入／匯出；匯入預設合併並以相同 project id 更新，不會清空其他作品
+- **IndexedDB 優先** — 專案預設寫入 IndexedDB，不可用時才降級至 localStorage
 - **Legacy Migration** — 首次載入時把舊 `suno_history_v1` 歷史安全遷移到版本化 Project envelope
 
 ### 🎼 Prompt 生成

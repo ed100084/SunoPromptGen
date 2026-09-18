@@ -230,9 +230,17 @@ export function createProjectRepository(options: ProjectRepositoryOptions = {}):
       const decoded = values.map((value) => decodePersistedProjectEnvelope(value));
       const invalid = decoded.find((result) => !result.ok);
       if (invalid && !invalid.ok) throw new Error(invalid.errors.join('; '));
-      const envelopes = decoded.flatMap((result) => result.ok ? [result.value] : []);
-      await withStorage((storage) => storage.replace(envelopes));
-      return envelopes.map((envelope) => envelope.project);
+      const imported = decoded.flatMap((result) => result.ok ? [result.value] : []);
+      const current = await listEnvelopes();
+      const importedIds = new Set(imported.map((envelope) => envelope.project.id));
+      const merged = [
+        ...imported,
+        ...current.filter((envelope) => !importedIds.has(envelope.project.id)),
+      ];
+      await withStorage((storage) => storage.replace(merged));
+      return merged
+        .sort((left, right) => right.project.updatedAt - left.project.updatedAt)
+        .map((envelope) => envelope.project);
     },
 
     async export(projects) {

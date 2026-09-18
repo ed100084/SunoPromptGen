@@ -2,14 +2,23 @@ import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useTheme } from '../../hooks/useTheme';
 import {
   analyzeCanonicalInsights,
+  appendRevision,
   compareRevisions,
   createDefaultSongProject,
+  deleteRevision,
   getActiveRevision,
+  selectRevision,
   type Revision,
   type SongProject,
 } from '../../domain';
 import { compilePrompt, type GenerationTarget as CompilerTarget, type PromptSong } from '../../prompt';
-import { loadProjects, saveProjects } from '../../persistence/projectStore';
+import {
+  deleteProject,
+  exportProjects,
+  importProjects,
+  loadProjects,
+  saveProjects,
+} from '../../persistence/projectStore';
 import { LyricsAnalyzer } from '../../components/LyricsAnalyzer';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { ModelStrategyPicker } from './ModelStrategyPicker';
@@ -213,6 +222,9 @@ export function V6Workspace() {
     return () => { cancelled = true; };
   }, []);
   const [copied, setCopied] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(DEFAULT_DRAFT));
+  const isDirty = JSON.stringify(draft) !== savedSnapshot;
   const rendered = useMemo(() => compilePrompt(toCompilerTarget(draft)), [draft]);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => dispatch({ type: 'set', key, value });
   const updateSource = (id: string, field: 'name' | 'role' | 'range', value: string) => {
@@ -224,17 +236,32 @@ export function V6Workspace() {
   });
   const removeSource = (id: string) => dispatch({ type: 'source-remove', id });
 
+  const persistProjectList = async (next: SongProject[], message: string, savedDraft?: Draft) => {
+    setProjects(next);
+    try {
+      await saveProjects(next);
+      if (savedDraft) setSavedSnapshot(JSON.stringify(savedDraft));
+      setStatusMessage(message);
+    } catch (error) {
+      setStatusMessage(`儲存失敗：${(error as Error).message}`);
+    }
+  };
+
+  const sourceRightsConfirmed = () => {
+    if ((draft.workflow !== 'mashup' && draft.workflow !== 'sample') || draft.rightsConfirmed) return true;
+    setStatusMessage('請先確認擁有或獲准使用來源素材。');
+    return false;
+  };
+
   const saveRevision = () => {
+    if (!sourceRightsConfirmed()) return;
     const current = projects.find((project) => project.id === activeProjectId);
     const revision = revisionFromDraft(draft, current?.activeRevisionId ?? null);
     let next: SongProject[];
     if (current) {
-      next = projects.map((project) => project.id === current.id ? {
-        ...project,
-        updatedAt: revision.createdAt,
-        activeRevisionId: revision.id,
-        revisions: [...project.revisions, revision],
-      } : project);
+      next = projects.map((project) => project.id === current.id
+        ? appendRevision(project, revision)
+        : project);
     } else {
       const project = createDefaultSongProject({ now: revision.createdAt, brief: { title: draft.title } });
       project.activeRevisionId = revision.id;
@@ -242,15 +269,59 @@ export function V6Workspace() {
       next = [project, ...projects];
       setActiveProjectId(project.id);
     }
-    setProjects(next);
-    void saveProjects(next).catch((error) => console.warn('[projects] save failed:', error));
+    void persistProjectList(next, current ? '已建立新 Revision。' : '已建立新 Project。', draft);
   };
 
+  const mayDiscardDraft = () => !isDirty || window.confirm('目前有尚未儲存的修改，確定要捨棄嗎？');
+
   const loadProject = (project: SongProject) => {
+    if (!mayDiscardDraft()) return;
     const revision = project.revisions.find((item) => item.id === project.activeRevisionId) ?? project.revisions.at(-1);
     if (!revision) return;
+    const nextDraft = draftFromRevision(revision);
     setActiveProjectId(project.id);
-    dispatch({ type: 'replace', draft: draftFromRevision(revision) });
+    dispatch({ type: 'replace', draft: nextDraft });
+    setSavedSnapshot(JSON.stringify(nextDraft));
+    setStatusMessage('');
+  };
+
+  const loadRevision = (revision: Revision) => {
+    if (!activeProject || !mayDiscardDraft()) return;
+    const selected = selectRevision(activeProject, revision.id);
+    const next = projects.map((project) => project.id === selected.id ? selected : project);
+    const nextDraft = draftFromRevision(revision);
+    setProjects(next);
+    dispatch({ type: 'replace', draft: nextDraft });
+    setSavedSnapshot(JSON.stringify(nextDraft));
+    void saveProjects(next).catch((error) => setStatusMessage(`切換版本失敗：${(error as Error).message}`));
+  };
+
+  const removeActiveProject = () => {
+    if (!activeProject || !window.confirm(`刪除「${activeRevision?.brief.title || '未命名作品'}」及其所有版本？`)) return;
+    const next = projects.filter((project) => project.id !== activeProject.id);
+    setProjects(next);
+    setActiveProjectId(null);
+    dispatch({ type: 'replace', draft: DEFAULT_DRAFT });
+    setSavedSnapshot(JSON.stringify(DEFAULT_DRAFT));
+    void deleteProject(activeProject.id).then(() => setStatusMessage('Project 已刪除。'))
+      .catch((error) => setStatusMessage(`刪除失敗：${(error as Error).message}`));
+  };
+
+  const removeActiveRevision = () => {
+    if (!activeProject || !activeRevision || !window.confirm('刪除此 Revision？有子版本或僅剩一版時不允許刪除。')) return;
+    try {
+      const updated = deleteRevision(activeProject, activeRevision.id);
+      const next = projects.map((project) => project.id === updated.id ? updated : project);
+      const revision = getActiveRevision(updated);
+      setProjects(next);
+      const nextDraft = draftFromRevision(revision);
+      dispatch({ type: 'replace', draft: nextDraft });
+      setSavedSnapshot(JSON.stringify(nextDraft));
+      void saveProjects(next).then(() => setStatusMessage('Revision 已刪除。'))
+        .catch((error) => setStatusMessage(`刪除失敗：${(error as Error).message}`));
+    } catch (error) {
+      setStatusMessage((error as Error).message);
+    }
   };
 
   const evaluateRevision = (rating: 1 | 2 | 3 | 4 | 5, notes: string) => {
@@ -269,20 +340,45 @@ export function V6Workspace() {
   };
 
   const copyPrompt = async () => {
+    if (!sourceRightsConfirmed()) return;
     await navigator.clipboard.writeText(rendered.primaryPrompt);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
   };
 
-  const exportProject = () => {
-    if (!activeProject) return;
-    const blob = new Blob([JSON.stringify(activeProject, null, 2)], { type: 'application/json' });
+  const downloadJson = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `${(draft.title || 'suno-project').replace(/[\\/:*?"<>|]/g, '')}.json`;
+    anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportProject = async () => {
+    if (!activeProject) return;
+    const content = await exportProjects([activeProject]);
+    downloadJson(content, `${(draft.title || 'suno-project').replace(/[\\/:*?"<>|]/g, '')}.json`);
+    setStatusMessage('Project 已匯出。');
+  };
+
+  const exportAll = async () => {
+    downloadJson(await exportProjects(projects), 'suno-v6-projects-backup.json');
+    setStatusMessage('完整備份已匯出。');
+  };
+
+  const importBackup = async (file: File) => {
+    try {
+      const imported = await importProjects(await file.text());
+      setProjects(imported);
+      setActiveProjectId(null);
+      dispatch({ type: 'replace', draft: DEFAULT_DRAFT });
+      setSavedSnapshot(JSON.stringify(DEFAULT_DRAFT));
+      setStatusMessage(`已匯入 ${imported.length} 個 Project。`);
+    } catch (error) {
+      setStatusMessage(`匯入失敗：${(error as Error).message}`);
+    }
   };
 
   const workflow = WORKFLOWS.find((item) => item.id === draft.workflow)!;
@@ -312,10 +408,16 @@ export function V6Workspace() {
           activeProjectId={activeProjectId}
           activeProject={activeProject}
           changes={changes}
-          onNewProject={() => { dispatch({ type: 'replace', draft: DEFAULT_DRAFT }); setActiveProjectId(null); }}
+          onNewProject={() => { if (!mayDiscardDraft()) return; dispatch({ type: 'replace', draft: DEFAULT_DRAFT }); setSavedSnapshot(JSON.stringify(DEFAULT_DRAFT)); setActiveProjectId(null); }}
           onLoadProject={loadProject}
-          onLoadRevision={(revision) => dispatch({ type: 'replace', draft: draftFromRevision(revision) })}
+          onLoadRevision={loadRevision}
           onEvaluateRevision={evaluateRevision}
+          onDeleteProject={removeActiveProject}
+          onDeleteRevision={removeActiveRevision}
+          onExportAll={() => void exportAll()}
+          onImport={(file) => void importBackup(file)}
+          dirty={isDirty}
+          statusMessage={statusMessage}
         />
         <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs dark:border-slate-800 dark:bg-slate-900"><h2 className="mb-3 font-bold">Insights v2</h2><div className="grid grid-cols-2 gap-2"><div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-800"><strong className="block text-lg">{insights.scope.includedRevisionCount}</strong>v6 revisions</div><div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-800"><strong className="block text-lg">{insights.ratings.average?.toFixed(1) ?? '—'}</strong>平均評分</div></div><p className="mt-2 text-slate-500">已隔離 {insights.scope.excludedMigratedCount} 個遷移專案，避免跨版本污染。</p></div>
         </div>

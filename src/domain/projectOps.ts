@@ -44,12 +44,14 @@ export function deleteRevision(project: SongProject, revisionId: string): SongPr
   if (project.revisions.some((revision) => revision.parentRevisionId === revisionId)) {
     throw new Error('Cannot delete a revision that has descendants');
   }
+  const removed = project.revisions.find((revision) => revision.id === revisionId);
   const revisions = project.revisions.filter((revision) => revision.id !== revisionId);
-  if (revisions.length === project.revisions.length) throw new Error(`Revision does not exist: ${revisionId}`);
+  if (!removed) throw new Error(`Revision does not exist: ${revisionId}`);
   return {
     ...project,
+    updatedAt: Date.now(),
     activeRevisionId: project.activeRevisionId === revisionId
-      ? revisions[revisions.length - 1].id
+      ? (removed.parentRevisionId ?? revisions[revisions.length - 1].id)
       : project.activeRevisionId,
     revisions,
   };
