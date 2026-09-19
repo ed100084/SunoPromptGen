@@ -9,7 +9,8 @@ describe('music flow', () => {
     expect(MOOD_TEMPLATES.length).toBeGreaterThanOrEqual(8);
     expect(new Set(MOOD_TEMPLATES.map((template) => template.id)).size).toBe(MOOD_TEMPLATES.length);
     expect(Object.keys(STYLE_TEMPLATES).sort()).toEqual(['avoid', 'genre', 'instruments', 'production', 'tempo', 'vocal']);
-    expect(Object.values(STYLE_TEMPLATES).every((templates) => templates.length >= 5)).toBe(true);
+    expect(MOOD_TEMPLATES.length).toBeGreaterThanOrEqual(16);
+    expect(Object.values(STYLE_TEMPLATES).every((templates) => templates.length >= 11)).toBe(true);
     expect([...MOOD_TEMPLATES, ...Object.values(STYLE_TEMPLATES).flat()].every((template) => template.value.length > 20)).toBe(true);
   });
 

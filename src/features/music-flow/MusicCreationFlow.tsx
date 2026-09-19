@@ -21,13 +21,15 @@ function TemplateButtons({ templates, value, onSelect }: {
   value: string;
   onSelect: (value: string) => void;
 }) {
-  return <div className="mb-2 flex flex-wrap gap-1.5">{templates.map((template) => <button
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? templates : templates.slice(0, 6);
+  return <div className="mb-2"><div className="flex flex-wrap gap-1.5">{visible.map((template) => <button
     key={template.id}
     type="button"
     title={template.description}
     onClick={() => onSelect(template.value)}
     className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition ${value === template.value ? 'border-violet-500 bg-violet-600 text-white' : 'border-slate-200 bg-slate-50 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-800'}`}
-  >{template.name}</button>)}</div>;
+  >{template.name}</button>)}{templates.length > 6 && <button type="button" onClick={() => setShowAll((open) => !open)} className="rounded-full border border-dashed border-violet-300 px-2.5 py-1.5 text-[11px] font-semibold text-violet-600 dark:border-violet-700 dark:text-violet-300">{showAll ? '收起' : `更多 ${templates.length - 6} 個`}</button>}</div></div>;
 }
 
 function AutoTextarea({ value, onChange, minRows = 2, className = '', ...props }: {
