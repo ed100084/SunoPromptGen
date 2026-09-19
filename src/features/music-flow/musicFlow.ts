@@ -28,6 +28,24 @@ export interface LyricsReview { sections: ParsedLyricsSection[]; issues: string[
 
 const DISCLAIMER = '以下為產品轉譯建議，不是 Suno 官方規格。';
 
+export interface MoodTemplate {
+  id: string;
+  name: string;
+  description: string;
+  value: string;
+}
+
+export const MOOD_TEMPLATES: readonly MoodTemplate[] = [
+  { id: 'bittersweet-rise', name: '苦澀後釋懷', description: '主歌內斂，副歌逐漸放開', value: 'bittersweet and intimate in the verses, gradually hopeful, cathartic but controlled in the final chorus' },
+  { id: 'warm-nostalgia', name: '溫暖懷舊', description: '像回看一段珍貴記憶', value: 'warm, nostalgic and tender, softly glowing, emotionally sincere without becoming overly sentimental' },
+  { id: 'night-drive', name: '深夜城市', description: '孤獨但有流動與節奏', value: 'nocturnal, urban and reflective, quietly lonely, hypnotic forward motion with a subtle sense of possibility' },
+  { id: 'romantic-tension', name: '曖昧拉扯', description: '克制、靠近、退後', value: 'restrained romantic tension, vulnerable and magnetic, alternating closeness and distance before an emotional release' },
+  { id: 'dark-cinematic', name: '黑暗電影感', description: '壓迫、懸疑、壯闊', value: 'dark, cinematic and suspenseful, slow-building pressure, dramatic scale with a dangerous undertone' },
+  { id: 'bright-youth', name: '明亮青春', description: '有速度感與向前動力', value: 'bright, youthful and uplifting, playful momentum, open-hearted confidence and a memorable celebratory lift' },
+  { id: 'healing-minimal', name: '安靜療癒', description: '留白、呼吸、慢慢安定', value: 'calm, healing and spacious, fragile at first, gradually settling into quiet reassurance and emotional clarity' },
+  { id: 'defiant-power', name: '倔強爆發', description: '壓抑累積後一次釋放', value: 'defiant and determined, tension held beneath the surface, building toward one powerful and liberating peak' },
+];
+
 export function suggestStyleFromReference(reference: ReferenceInput): StyleFacets {
   const source = [reference.artist, reference.song, reference.vocal, reference.melody, reference.notes].filter(Boolean).join('；');
   return {
