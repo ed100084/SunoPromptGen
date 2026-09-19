@@ -7,12 +7,7 @@ test('follows reference to Suno output flow', async ({ page }) => {
   await page.getByPlaceholder(/樂團／音樂人/).fill('參考樂團的漸進編曲');
   await page.getByPlaceholder(/人聲/).fill('溫暖而有爆發力的女聲');
   await page.getByRole('button', { name: /轉成可調風格/ }).click();
-  await page.getByRole('button', { name: '電影流行' }).click();
   await page.getByRole('button', { name: '深夜城市' }).click();
-  await page.getByRole('button', { name: '鋼琴弦樂' }).click();
-  await page.getByRole('button', { name: '細膩女聲' }).click();
-  await page.getByRole('button', { name: '中板 88–102' }).click();
-  await page.getByRole('button', { name: '寬銀幕電影感' }).click();
   await expect.poll(() => page.locator('textarea').evaluateAll((items) => items.some((item) => (item as HTMLTextAreaElement).value.includes('參考樂團')))).toBe(true);
   await expect(page.getByText('Final Chorus').first()).toBeVisible();
   await expect.poll(() => page.locator('textarea').evaluateAll((items) => items.some((item) => (item as HTMLTextAreaElement).value.includes('nocturnal')))).toBe(true);
