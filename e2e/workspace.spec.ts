@@ -15,6 +15,9 @@ test('builds lyrics handoff prompt and reviews pasted lyrics', async ({ page }) 
   await page.getByPlaceholder('歌名').fill('雨停以前');
   await page.getByPlaceholder(/歌詞主題/).fill('在城市雨夜告別');
   await page.getByRole('button', { name: '複製填詞 Prompt' }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { name: '生成完整歌詞並回填' })).toBeVisible();
+  await page.getByRole('button', { name: '↗ 使用其它 AI' }).click();
+  await expect(page.getByRole('button', { name: '📋 從剪貼簿匯入並檢查' })).toBeVisible();
   await page.getByPlaceholder(/把其他 AI/).fill('[Verse 1]\n走過雨夜\n\n[Chorus]\n記住我 記住我 再一次記住我');
   await expect(page.getByText(/待確認/)).toBeVisible();
   await expect(page.getByText('缺少 [Bridge]。')).toBeVisible();

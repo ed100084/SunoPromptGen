@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildExternalLyricsPrompt, buildSunoOutput, createArrangement, MOOD_TEMPLATES, parseAndReviewLyrics, STYLE_TEMPLATES, suggestStyleFromReference } from './musicFlow';
+import { buildExternalLyricsPrompt, buildSunoOutput, createArrangement, MOOD_TEMPLATES, normalizeGeneratedLyrics, parseAndReviewLyrics, STYLE_TEMPLATES, suggestStyleFromReference } from './musicFlow';
 
 const style = suggestStyleFromReference({ artist: '參考樂團', song: '', vocal: '溫暖女聲', melody: '', url: '', notes: '漸進式編曲' });
 const arrangement = createArrangement(style);
@@ -21,6 +21,10 @@ describe('music flow', () => {
   it('產生可交給外部 AI 的填詞 prompt', () => {
     expect(buildExternalLyricsPrompt({ title: '雨停以前', concept: '告別', language: '繁體中文', style, sections: arrangement })).toContain('[Chorus]');
   });
+  it('清除外部 AI 常見包裝', () => {
+    expect(normalizeGeneratedLyrics('```text\n歌詞：\n[Verse 1]\n雨夜\n```')).toBe('[Verse 1]\n雨夜');
+  });
+
   it('解析回貼歌詞並指出缺少段落', () => {
     const review = parseAndReviewLyrics('[Verse 1]\n第一句\n\n[Chorus]\n記住我 記住我 再一次記住我', arrangement);
     expect(review.sections).toHaveLength(2);

@@ -190,8 +190,15 @@ export function buildExternalLyricsPrompt(options: {
   ].join('\n');
 }
 
+export function normalizeGeneratedLyrics(value: string): string {
+  let normalized = value.trim();
+  const fenced = normalized.match(/^```(?:text|markdown|md)?\s*\n?([\s\S]*?)\n?```$/i);
+  if (fenced) normalized = fenced[1].trim();
+  return normalized.replace(/^(?:最終歌詞|完整歌詞|歌詞|lyrics)\s*[：:]\s*\n?/i, '').trim();
+}
+
 export function parseAndReviewLyrics(value: string, arrangement: FlowSection[]): LyricsReview {
-  const normalized = value.trim().replace(/^```(?:\w+)?\s*|```$/g, '').trim();
+  const normalized = normalizeGeneratedLyrics(value);
   const matches = [...normalized.matchAll(/^\[([^\]]+)]\s*$/gm)];
   const sections: ParsedLyricsSection[] = matches.map((match, index) => ({
     tag: match[1].trim(),
