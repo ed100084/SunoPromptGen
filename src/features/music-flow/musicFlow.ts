@@ -28,14 +28,16 @@ export interface LyricsReview { sections: ParsedLyricsSection[]; issues: string[
 
 const DISCLAIMER = '以下為產品轉譯建議，不是 Suno 官方規格。';
 
-export interface MoodTemplate {
+export interface StyleTemplate {
   id: string;
   name: string;
   description: string;
   value: string;
 }
 
-export const MOOD_TEMPLATES: readonly MoodTemplate[] = [
+export type StyleTemplateMap = Record<Exclude<keyof StyleFacets, 'mood'>, readonly StyleTemplate[]>;
+
+export const MOOD_TEMPLATES: readonly StyleTemplate[] = [
   { id: 'bittersweet-rise', name: '苦澀後釋懷', description: '主歌內斂，副歌逐漸放開', value: 'bittersweet and intimate in the verses, gradually hopeful, cathartic but controlled in the final chorus' },
   { id: 'warm-nostalgia', name: '溫暖懷舊', description: '像回看一段珍貴記憶', value: 'warm, nostalgic and tender, softly glowing, emotionally sincere without becoming overly sentimental' },
   { id: 'night-drive', name: '深夜城市', description: '孤獨但有流動與節奏', value: 'nocturnal, urban and reflective, quietly lonely, hypnotic forward motion with a subtle sense of possibility' },
@@ -45,6 +47,52 @@ export const MOOD_TEMPLATES: readonly MoodTemplate[] = [
   { id: 'healing-minimal', name: '安靜療癒', description: '留白、呼吸、慢慢安定', value: 'calm, healing and spacious, fragile at first, gradually settling into quiet reassurance and emotional clarity' },
   { id: 'defiant-power', name: '倔強爆發', description: '壓抑累積後一次釋放', value: 'defiant and determined, tension held beneath the surface, building toward one powerful and liberating peak' },
 ];
+
+export const STYLE_TEMPLATES: StyleTemplateMap = {
+  genre: [
+    { id: 'cinematic-pop', name: '電影流行', description: '清楚旋律與寬闊發展', value: 'cinematic pop, melodic, emotionally focused, modern organic production' },
+    { id: 'urban-synth', name: '都會電子', description: '夜色與電子律動', value: 'urban synth-pop, sleek electronic pulse, atmospheric and contemporary' },
+    { id: 'live-rock', name: '現場搖滾', description: '真實樂團與動態', value: 'live alternative rock, organic band interplay, dynamic and emotionally direct' },
+    { id: 'neo-soul', name: 'Neo Soul', description: '柔滑和聲與律動', value: 'modern neo-soul, rich harmony, laid-back pocket, intimate and sophisticated' },
+    { id: 'indie-folk', name: '獨立民謠', description: '敘事、木質、親密', value: 'intimate indie folk, acoustic storytelling, warm and understated' },
+    { id: 'ambient-score', name: '氛圍配樂', description: '空間、紋理、漸進', value: 'ambient cinematic score, evolving textures, spacious and immersive' },
+  ],
+  instruments: [
+    { id: 'piano-strings', name: '鋼琴弦樂', description: '抒情且能漸進堆疊', value: 'felt piano carries the motif, warm strings widen the choruses, restrained drums enter gradually' },
+    { id: 'guitar-band', name: '吉他樂團', description: '真實現場動態', value: 'clean electric guitar, melodic bass, live drums, overdriven guitars opening in the final chorus' },
+    { id: 'synth-electronic', name: '合成器電子', description: '脈衝與空間層次', value: 'analog synth pulse, deep electronic bass, crisp programmed drums, airy pads and subtle arpeggios' },
+    { id: 'acoustic-small', name: '小編制原聲', description: '留白與近距離感', value: 'fingerpicked acoustic guitar, upright piano, brushed percussion, sparse cello accents' },
+    { id: 'orchestral', name: '電影管弦', description: '大尺度與戲劇張力', value: 'low strings and piano establish tension, brass and full orchestra reserved for the climax' },
+  ],
+  vocal: [
+    { id: 'female-intimate', name: '細膩女聲', description: '近距離到高峰', value: 'intimate female alto, clear diction, breath-controlled verses, emotionally open but not over-sung choruses' },
+    { id: 'male-warm', name: '溫暖男聲', description: '沉穩而具敘事感', value: 'warm male baritone, conversational verses, textured midrange, controlled lift in the chorus' },
+    { id: 'airy', name: '空靈氣聲', description: '輕盈、脆弱、空間感', value: 'airy breathy vocal, delicate phrasing, soft falsetto layers, intimate and fragile' },
+    { id: 'power', name: '爆發主唱', description: '前段克制、後段釋放', value: 'powerful lead vocal, restrained lower register in verses, full resonant belt reserved for the final chorus' },
+    { id: 'duet', name: '男女對唱', description: '視角交替與合唱', value: 'male and female duet, alternating intimate perspectives, harmonizing together in the chorus' },
+  ],
+  tempo: [
+    { id: 'slow', name: '慢板 72–82', description: '適合抒情與留白', value: '78 BPM, steady slow pulse, spacious phrasing' },
+    { id: 'mid', name: '中板 88–102', description: '自然推進、用途廣', value: '96 BPM, steady mid-tempo groove, gentle forward momentum' },
+    { id: 'upbeat', name: '輕快 112–124', description: '明亮且具律動', value: '118 BPM, upbeat driving pulse, danceable without feeling rushed' },
+    { id: 'half-time', name: '半拍重量感', description: '寬廣、沉重、戲劇化', value: '84 BPM with a spacious half-time feel, heavy downbeats and controlled syncopation' },
+    { id: 'free-rubato', name: '自由速度', description: '適合前奏與極簡作品', value: 'rubato opening, gradually settling into a subtle pulse, flexible expressive timing' },
+  ],
+  production: [
+    { id: 'clean-modern', name: '清晰現代', description: '主體突出、層次乾淨', value: 'clean modern production, clear foreground, controlled low end, cohesive transitions and wide but natural choruses' },
+    { id: 'warm-analog', name: '溫暖類比', description: '柔和顆粒與真實感', value: 'warm analog character, gentle tape saturation, organic room ambience, soft transients' },
+    { id: 'wide-cinematic', name: '寬銀幕電影感', description: '景深與高潮尺度', value: 'wide cinematic depth, intimate dry verses, expanding stereo field and reverberant scale at the climax' },
+    { id: 'raw-live', name: '真實現場', description: '保留呼吸和演奏感', value: 'raw live-room energy, natural performance imperfections, minimal polishing, dynamic band interaction' },
+    { id: 'lofi-texture', name: 'Lo-fi 質感', description: '柔焦、舊感、親密', value: 'soft lo-fi texture, muted highs, subtle vinyl noise, close and nostalgic atmosphere' },
+  ],
+  avoid: [
+    { id: 'no-overproduction', name: '避免過度製作', description: '保留空間與動態', value: 'overproduction, constant maximal energy, excessive layers, harsh limiting' },
+    { id: 'no-cheesy', name: '避免俗套', description: '不要廉價煽情', value: 'cheesy sentimentality, predictable inspirational clichés, melodramatic key changes' },
+    { id: 'no-dense', name: '避免擁擠', description: '讓主旋律與人聲呼吸', value: 'dense frequency masking, busy accompaniment under vocals, competing lead elements' },
+    { id: 'no-imitation', name: '避免直接模仿', description: '保留參考但不要複製', value: 'direct imitation, copyrighted lyrics, recognizable signature melody, artist impersonation' },
+    { id: 'no-vocal-effects', name: '避免重度人聲效果', description: '維持自然辨識度', value: 'heavy autotune artifacts, excessive vocal chopping, buried lead vocal, unnatural pronunciation' },
+  ],
+};
 
 export function suggestStyleFromReference(reference: ReferenceInput): StyleFacets {
   const source = [reference.artist, reference.song, reference.vocal, reference.melody, reference.notes].filter(Boolean).join('；');

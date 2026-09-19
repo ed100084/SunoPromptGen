@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { buildExternalLyricsPrompt, buildSunoOutput, createArrangement, MOOD_TEMPLATES, parseAndReviewLyrics, suggestStyleFromReference } from './musicFlow';
+import { buildExternalLyricsPrompt, buildSunoOutput, createArrangement, MOOD_TEMPLATES, parseAndReviewLyrics, STYLE_TEMPLATES, suggestStyleFromReference } from './musicFlow';
 
 const style = suggestStyleFromReference({ artist: '參考樂團', song: '', vocal: '溫暖女聲', melody: '', url: '', notes: '漸進式編曲' });
 const arrangement = createArrangement(style);
 
 describe('music flow', () => {
-  it('提供多種可直接修改的情緒樣板', () => {
+  it('為所有 Style 欄位提供可直接修改的樣板', () => {
     expect(MOOD_TEMPLATES.length).toBeGreaterThanOrEqual(8);
     expect(new Set(MOOD_TEMPLATES.map((template) => template.id)).size).toBe(MOOD_TEMPLATES.length);
-    expect(MOOD_TEMPLATES.every((template) => template.value.length > 20)).toBe(true);
+    expect(Object.keys(STYLE_TEMPLATES).sort()).toEqual(['avoid', 'genre', 'instruments', 'production', 'tempo', 'vocal']);
+    expect(Object.values(STYLE_TEMPLATES).every((templates) => templates.length >= 5)).toBe(true);
+    expect([...MOOD_TEMPLATES, ...Object.values(STYLE_TEMPLATES).flat()].every((template) => template.value.length > 20)).toBe(true);
   });
 
   it('從參考描述產生可調 style 與完整起伏', () => {
