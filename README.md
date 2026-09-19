@@ -1,6 +1,6 @@
 # Suno Prompt Generator
 
-中文友善的 **Suno v6 Creative Workspace** — 從創作意圖建立新歌、探索變體、局部改歌詞或編曲，並產生可複製的 Suno 指令。
+中文友善的 **Suno 音樂生成流程**：從參考樂團／歌曲／人聲／旋律出發，調整可理解的風格特徵，自動配置段落起伏，將填詞 Prompt 交給外部 AI，回貼歌詞後完成檢查，最後輸出可直接貼入 Suno 的 Style、Custom Lyrics 與設定。
 PWA 可離線使用，每次 push 自動部署到 GitHub Pages。
 
 > v6-first 重寫版不直接呼叫 Suno；它將 Creative Brief 編譯成可貼入 Suno 的指令。v6 與 v6-wild 依官方說明僅供付費方案使用。

@@ -1,38 +1,28 @@
 import { expect, test } from '@playwright/test';
 
-test.beforeEach(async ({ page }) => {
-  await page.goto('./');
+test.beforeEach(async ({ page }) => { await page.goto('./'); });
+
+test('follows reference to Suno output flow', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: 'Suno 音樂生成流程' })).toBeVisible();
+  await page.getByPlaceholder(/樂團／音樂人/).fill('參考樂團的漸進編曲');
+  await page.getByPlaceholder(/人聲/).fill('溫暖而有爆發力的女聲');
+  await page.getByRole('button', { name: /轉成可調風格/ }).click();
+  await expect.poll(() => page.locator('textarea').evaluateAll((items) => items.some((item) => (item as HTMLTextAreaElement).value.includes('參考樂團')))).toBe(true);
+  await expect(page.getByText('Final Chorus').first()).toBeVisible();
 });
 
-test('loads v6 workspace and applies a preset', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Suno v6 Creative Workspace' })).toBeVisible();
-  await page.getByRole('button', { name: '展開進階設定' }).click();
-  await page.getByRole('button', { name: /華語電影感抒情/ }).click();
-  await expect(page.getByText(/已套用「華語電影感抒情」/)).toBeVisible();
-  await expect.poll(() => page.locator('input, textarea').evaluateAll((elements) =>
-    elements.some((element) => /cinematic/i.test((element as HTMLInputElement).value)))).toBe(true);
+test('builds lyrics handoff prompt and reviews pasted lyrics', async ({ page }) => {
+  await page.getByPlaceholder('歌名').fill('雨停以前');
+  await page.getByPlaceholder(/歌詞主題/).fill('在城市雨夜告別');
+  await page.getByRole('button', { name: '複製填詞 Prompt' }).scrollIntoViewIfNeeded();
+  await page.getByPlaceholder(/把其他 AI/).fill('[Verse 1]\n走過雨夜\n\n[Chorus]\n記住我 記住我 再一次記住我');
+  await expect(page.getByText(/待確認/)).toBeVisible();
+  await expect(page.getByText('缺少 [Bridge]。')).toBeVisible();
 });
 
-test('edits structured sections and saves a project', async ({ page }) => {
-  await page.getByRole('button', { name: '展開進階設定' }).click();
-  await page.getByRole('button', { name: '新增段落' }).click();
-  await expect.poll(() => page.getByRole('textbox').evaluateAll((elements) =>
-    elements.filter((element) => (element as HTMLInputElement).value === 'Verse').length)).toBeGreaterThan(0);
-  await page.getByRole('button', { name: '儲存版本' }).click();
-  await expect(page.getByText(/已建立新 Project|已建立新 Revision/)).toBeVisible();
-  await expect(page.getByText(/1 revisions/)).toBeVisible();
-});
-
-test('creates a coordinated direction with one click', async ({ page }) => {
-  await page.getByRole('button', { name: '大膽' }).click();
-  await page.getByRole('button', { name: /快速隨機/ }).click();
-  await expect(page.getByText('已產生大膽隨機方向。')).toBeVisible();
-  await page.getByRole('button', { name: '展開進階設定' }).click();
-  await expect(page.getByText('v6-wild', { exact: true }).first()).toBeVisible();
-});
-
-test('persists project across reload', async ({ page }) => {
-  await page.getByRole('button', { name: '儲存版本' }).click();
-  await page.reload();
-  await expect(page.getByText(/1 revisions/)).toBeVisible();
+test('shows final Suno style custom lyrics and settings', async ({ page }) => {
+  await expect(page.getByRole('button', { name: '複製 Style' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '複製 Custom Lyrics' })).toBeVisible();
+  await expect(page.getByText('Custom 設定')).toBeVisible();
+  await expect(page.getByText(/"mode": "Custom"/)).toBeVisible();
 });
